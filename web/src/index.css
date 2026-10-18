@@ -232,8 +232,37 @@ select:hover, input[type='number']:hover { border-color: var(--border); }
 .empty p { margin: 3px 0; max-width: 360px; }
 .react-flow__panel.stats { margin: 12px; color: var(--muted); font-size: 12px; }
 
-.react-flow__edge.wire-live .react-flow__edge-path { stroke: var(--live); stroke-width: 2.4; }
-.react-flow__edge.wire-idle .react-flow__edge-path { stroke: var(--muted); }
+/* ---------- Wires ---------- */
+.wire { --wire: var(--muted); }
+.wire[data-signal='number'] { --wire: var(--num); }
+.wire[data-signal='boolean'] { --wire: var(--bool); }
+.react-flow__edge.wire-live .wire[data-auto='true'] { --wire: var(--live); }
+.wire path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.wire-casing { stroke: color-mix(in srgb, var(--wire) 40%, #000); stroke-width: 6.6; }
+.wire-core { stroke: var(--wire); stroke-width: 3.8; transition: stroke-width 0.12s; }
+.react-flow__edge:hover .wire-core { stroke-width: 4.6; }
+.wire-halo { stroke: var(--accent); stroke-opacity: 0.3; stroke-width: 13; }
+.wire-flow { display: none; stroke: #fff; stroke-opacity: 0.75; stroke-width: 1.8; stroke-dasharray: 0.1 11; }
+.react-flow__edge.wire-live .wire-flow { display: inline; animation: wire-flow 0.6s linear infinite; }
+@keyframes wire-flow { to { stroke-dashoffset: -11.1; } }
+.wire-handle, .wire-ghost { pointer-events: all; } /* React Flow makes edges hit-testable on their stroke only, which leaves a circle's middle dead */
+.wire-handle { fill: var(--panel); stroke: var(--accent); stroke-width: 2.6; cursor: grab; }
+.wire-handle:hover { fill: var(--accent); }
+.wire-handle:active { cursor: grabbing; }
+.wire-ghost { fill: var(--panel); stroke: var(--accent); stroke-width: 1.8; opacity: 0.85; cursor: copy; }
+.wire-ghost:hover { fill: var(--accent); opacity: 1; }
+
+/* A selected wire is lifted above the others; its own toolbar must sit above all of them or its wide click area covers the buttons. */
+.react-flow__edgelabel-renderer { z-index: 2000; }
+.wire-bar { position: absolute; display: flex; align-items: center; gap: 5px; padding: 5px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg); pointer-events: all; z-index: 5; }
+.wire-bar .sep { width: 1px; height: 16px; margin: 0 2px; background: var(--border); }
+.swatch { width: 16px; height: 16px; padding: 0; border: 2px solid var(--panel); border-radius: 50%; box-shadow: 0 0 0 1px var(--border); cursor: pointer; }
+.swatch:hover { transform: scale(1.12); }
+.swatch.on { box-shadow: 0 0 0 2px var(--accent); }
+.swatch-auto { background: conic-gradient(var(--num) 0 50%, var(--bool) 0 100%); }
+.wire-bar .tool { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; color: var(--muted); background: transparent; border: 0; border-radius: 6px; }
+.wire-bar .tool:hover { color: var(--text); background: var(--panel-2); }
+.wire-bar .tool.danger:hover { color: var(--danger); }
 
 .react-flow__panel.dock { display: flex; align-items: center; gap: 2px; margin-bottom: 14px; padding: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg); }
 .dock .seg { display: flex; gap: 2px; }
@@ -315,7 +344,7 @@ select:hover, input[type='number']:hover { border-color: var(--border); }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .fan-on, .buzzer-on, .status-running i, .toast { animation: none; }
+  .fan-on, .buzzer-on, .status-running i, .toast, .react-flow__edge.wire-live .wire-flow { animation: none; }
   .app { transition: none; }
 }
 

@@ -1,7 +1,7 @@
-import type { Edge } from '@xyflow/react'
 import { getDef } from '../components/registry'
 import type { Props } from '../components/types'
-import type { IotNode } from './store'
+import type { IotNode, WireEdge } from './store'
+import { isWireColor, MAX_POINTS, type Pt } from './wire'
 
 export const PROJECT_VERSION = 1
 
@@ -12,10 +12,20 @@ export interface Project {
   version: number
   name: string
   nodes: { id: string; kind: string; x: number; y: number; props: Props }[]
-  edges: { id: string; source: string; sourceHandle: string; target: string; targetHandle: string }[]
+  edges: {
+    id: string
+    source: string
+    sourceHandle: string
+    target: string
+    targetHandle: string
+    /** Bend points the user placed, in canvas coordinates. */
+    points?: Pt[]
+    /** One of the palette colours. Absent means "pick by signal type". */
+    color?: string
+  }[]
 }
 
-export function toProject(name: string, nodes: IotNode[], edges: Edge[]): Project {
+export function toProject(name: string, nodes: IotNode[], edges: WireEdge[]): Project {
   return {
     version: PROJECT_VERSION,
     name,
@@ -26,11 +36,25 @@ export function toProject(name: string, nodes: IotNode[], edges: Edge[]): Projec
       sourceHandle: e.sourceHandle ?? '',
       target: e.target,
       targetHandle: e.targetHandle ?? '',
+      ...(e.data?.points?.length ? { points: e.data.points } : {}),
+      ...(e.data?.color ? { color: e.data.color } : {}),
     })),
   }
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/** Keeps only well-formed bend points; anything else about a wire's shape is dropped, not fatal. */
+function parsePoints(raw: unknown): Pt[] {
+  if (!Array.isArray(raw)) return []
+  const out: Pt[] = []
+  for (const p of raw.slice(0, MAX_POINTS)) {
+    if (isRecord(p) && typeof p.x === 'number' && typeof p.y === 'number' && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+      out.push({ x: p.x, y: p.y })
+    }
+  }
+  return out
+}
 
 /** Validates untrusted input (file or localStorage). Returns null if it is not a usable project. */
 export function parseProject(raw: unknown): Project | null {
@@ -70,12 +94,15 @@ export function parseProject(raw: unknown): Project | null {
     const key = `${target}:${targetHandle}`
     if (usedInputs.has(key)) return null
     usedInputs.add(key)
+    const points = parsePoints(e.points)
     edges.push({
       id: id as string,
       source: source as string,
       sourceHandle: sourceHandle as string,
       target: target as string,
       targetHandle: targetHandle as string,
+      ...(points.length ? { points } : {}),
+      ...(isWireColor(e.color) ? { color: e.color } : {}),
     })
   }
 

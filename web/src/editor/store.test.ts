@@ -11,6 +11,7 @@ const node = (id: string, kind: string, x = 0, y = 0, selected = false): IotNode
 
 const wire = (id: string, source: string, sourceHandle: string, target: string, targetHandle: string) => ({
   id,
+  type: 'wire' as const,
   source,
   sourceHandle,
   target,
@@ -110,3 +111,67 @@ describe('duplicateSelected', () => {
     expect(useEditor.getState().edges).toHaveLength(3)
   })
 })
+
+describe('wires with a custom shape', () => {
+  const bend = [{ x: 100, y: 50 }, { x: 100, y: 200 }]
+
+  it('stores points and colour on the wire, and clears them again', () => {
+    useEditor.getState().setWire('e1', { points: bend, color: '#e5484d' })
+    expect(useEditor.getState().edges.find((e) => e.id === 'e1')?.data).toEqual({ points: bend, color: '#e5484d' })
+    useEditor.getState().setWire('e1', { points: [], color: undefined })
+    expect(useEditor.getState().edges.find((e) => e.id === 'e1')?.data).toEqual({})
+  })
+
+  it('makes a whole drag a single undo step', () => {
+    const { beginWireEdit, setWire, undo } = useEditor.getState()
+    beginWireEdit()
+    for (let i = 1; i <= 20; i++) setWire('e1', { points: [{ x: i, y: i }] })
+    expect(useEditor.getState().past).toHaveLength(1)
+    undo()
+    expect(useEditor.getState().edges.find((e) => e.id === 'e1')?.data?.points).toBeUndefined()
+  })
+
+  it('removes a wire and brings it back with undo', () => {
+    useEditor.getState().removeWire('e2')
+    expect(useEditor.getState().edges.map((e) => e.id)).toEqual(['e1', 'e3'])
+    useEditor.getState().undo()
+    expect(useEditor.getState().edges).toHaveLength(3)
+  })
+
+  it('moves the bends along when both ends are dragged together', () => {
+    useEditor.getState().setWire('e1', { points: bend })
+    useEditor.getState().onNodesChange([
+      { type: 'position', id: 't', position: { x: 30, y: 10 } },
+      { type: 'position', id: 'c', position: { x: 30, y: 10 } },
+    ])
+    expect(useEditor.getState().edges.find((e) => e.id === 'e1')?.data?.points).toEqual([
+      { x: 130, y: 60 },
+      { x: 130, y: 210 },
+    ])
+  })
+
+  it('leaves the bends alone when only one end moves', () => {
+    useEditor.getState().setWire('e1', { points: bend })
+    useEditor.getState().onNodesChange([{ type: 'position', id: 't', position: { x: 30, y: 10 } }])
+    expect(useEditor.getState().edges.find((e) => e.id === 'e1')?.data?.points).toEqual(bend)
+  })
+
+  it('leaves the bends alone when the ends move by different amounts', () => {
+    useEditor.getState().setWire('e1', { points: bend })
+    useEditor.getState().onNodesChange([
+      { type: 'position', id: 't', position: { x: 30, y: 10 } },
+      { type: 'position', id: 'c', position: { x: 50, y: 10 } },
+    ])
+    expect(useEditor.getState().edges.find((e) => e.id === 'e1')?.data?.points).toEqual(bend)
+  })
+
+  it('copies the shape with a duplicate, moved with the copy and independent of the original', () => {
+    useEditor.getState().setWire('e1', { points: [{ x: 100, y: 50 }], color: '#30a46c' })
+    useEditor.setState((s) => ({ nodes: s.nodes.map((n) => ({ ...n, selected: n.id === 't' || n.id === 'c' })) }))
+    useEditor.getState().duplicateSelected()
+    const copy = useEditor.getState().edges.find((e) => !['e1', 'e2', 'e3'].includes(e.id))!
+    expect(copy.data).toEqual({ points: [{ x: 140, y: 90 }], color: '#30a46c' })
+    expect(useEditor.getState().edges.find((e) => e.id === 'e1')?.data?.points).toEqual([{ x: 100, y: 50 }])
+  })
+})
+

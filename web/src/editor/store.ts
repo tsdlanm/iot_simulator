@@ -14,13 +14,18 @@ import { wouldCreateCycle } from '../sim/engine'
 import { exampleProject } from './example'
 import { loadStored } from './storage'
 import { parseProject, type Project } from './serialize'
+import { shiftPoints, type Pt } from './wire'
 
 export type IotNodeData = { kind: string; props: Props }
 export type IotNode = Node<IotNodeData, 'iot'>
 
+/** What a wire remembers about its shape. Both are optional: a fresh wire is a plain curve. */
+export type WireData = { points?: Pt[]; color?: string }
+export type WireEdge = Edge<WireData, 'wire'>
+
 interface Snapshot {
   nodes: IotNode[]
-  edges: Edge[]
+  edges: WireEdge[]
 }
 
 const HISTORY_LIMIT = 100
@@ -36,7 +41,15 @@ function fromProject(p: Project): Snapshot & { name: string } {
       position: { x: n.x, y: n.y },
       data: { kind: n.kind, props: n.props },
     })),
-    edges: p.edges.map((e) => ({ ...e })),
+    edges: p.edges.map((e) => ({
+      id: e.id,
+      type: 'wire' as const,
+      source: e.source,
+      sourceHandle: e.sourceHandle,
+      target: e.target,
+      targetHandle: e.targetHandle,
+      ...(e.points || e.color ? { data: { ...(e.points ? { points: e.points } : {}), ...(e.color ? { color: e.color } : {}) } } : {}),
+    })),
   }
 }
 
@@ -46,13 +59,17 @@ interface EditorState extends Snapshot {
   future: Snapshot[]
   setName: (name: string) => void
   onNodesChange: (changes: NodeChange<IotNode>[]) => void
-  onEdgesChange: (changes: EdgeChange[]) => void
+  onEdgesChange: (changes: EdgeChange<WireEdge>[]) => void
   onConnect: (c: Connection) => void
   isValidConnection: (c: Connection | Edge) => boolean
   beginDrag: () => void
   addNode: (kind: string, position: { x: number; y: number }) => void
   updateProp: (id: string, key: string, value: PropValue) => void
   removeNode: (id: string) => void
+  /** Call once when the user starts reshaping a wire, so the whole drag is a single undo step. */
+  beginWireEdit: () => void
+  setWire: (id: string, patch: Partial<WireData>) => void
+  removeWire: (id: string) => void
   /** Deletes every selected component and wire as one undo step. */
   removeSelected: () => void
   selectAll: () => void
@@ -95,10 +112,26 @@ export const useEditor = create<EditorState>((set, get) => {
     onNodesChange: (changes) => {
       const removed = new Set(changes.filter((c) => c.type === 'remove').map((c) => c.id))
       if (removed.size > 0) pushHistory()
-      set((s) => ({
-        nodes: applyNodeChanges(changes, s.nodes),
-        edges: removed.size > 0 ? s.edges.filter((e) => !removed.has(e.source) && !removed.has(e.target)) : s.edges,
-      }))
+      set((s) => {
+        // How far each node moved in this update, so a wire between two nodes dragged together keeps its shape.
+        const moved = new Map<string, Pt>()
+        for (const c of changes) {
+          if (c.type !== 'position' || !c.position) continue
+          const before = s.nodes.find((n) => n.id === c.id)?.position
+          if (before) moved.set(c.id, { x: c.position.x - before.x, y: c.position.y - before.y })
+        }
+        let edges = removed.size > 0 ? s.edges.filter((e) => !removed.has(e.source) && !removed.has(e.target)) : s.edges
+        if (moved.size > 1) {
+          edges = edges.map((e) => {
+            const a = moved.get(e.source)
+            const b = moved.get(e.target)
+            const points = e.data?.points
+            if (!a || !b || !points?.length || (a.x === 0 && a.y === 0) || a.x !== b.x || a.y !== b.y) return e
+            return { ...e, data: { ...e.data, points: shiftPoints(points, a.x, a.y) } }
+          })
+        }
+        return { nodes: applyNodeChanges(changes, s.nodes), edges }
+      })
     },
 
     onEdgesChange: (changes) => {
@@ -112,8 +145,9 @@ export const useEditor = create<EditorState>((set, get) => {
     onConnect: (c) => {
       if (!get().isValidConnection(c)) return
       pushHistory()
-      const edge: Edge = {
+      const edge: WireEdge = {
         id: `e-${newId()}`,
+        type: 'wire',
         source: c.source,
         sourceHandle: c.sourceHandle,
         target: c.target,
@@ -123,6 +157,24 @@ export const useEditor = create<EditorState>((set, get) => {
     },
 
     beginDrag: () => pushHistory(),
+
+    beginWireEdit: () => pushHistory(),
+
+    setWire: (id, patch) =>
+      set((s) => ({
+        edges: s.edges.map((e) => {
+          if (e.id !== id) return e
+          const data: WireData = { ...e.data, ...patch }
+          if (!data.points?.length) delete data.points
+          if (!data.color) delete data.color
+          return { ...e, data }
+        }),
+      })),
+
+    removeWire: (id) => {
+      pushHistory()
+      set((s) => ({ edges: s.edges.filter((e) => e.id !== id) }))
+    },
 
     addNode: (kind, position) => {
       const def = getDef(kind)
@@ -183,9 +235,17 @@ export const useEditor = create<EditorState>((set, get) => {
         data: { ...n.data, props: { ...n.data.props } },
         selected: true,
       }))
-      const wires: Edge[] = edges
+      const wires: WireEdge[] = edges
         .filter((e) => ids.has(e.source) && ids.has(e.target))
-        .map((e) => ({ ...e, id: `e-${newId()}`, source: ids.get(e.source)!, target: ids.get(e.target)!, selected: false }))
+        .map((e) => ({
+          ...e,
+          id: `e-${newId()}`,
+          source: ids.get(e.source)!,
+          target: ids.get(e.target)!,
+          selected: false,
+          // The copies sit 40px away, so their bends move with them.
+          data: e.data?.points ? { ...e.data, points: shiftPoints(e.data.points, 40, 40) } : e.data,
+        }))
       set({ nodes: [...nodes.map((n) => (n.selected ? { ...n, selected: false } : n)), ...copies], edges: [...edges, ...wires] })
     },
 

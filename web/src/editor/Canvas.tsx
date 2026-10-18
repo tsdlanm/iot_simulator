@@ -7,8 +7,8 @@ import {
   SelectionMode,
   useReactFlow,
   useStore,
-  type Edge,
   type FinalConnectionState,
+  type EdgeTypes,
   type NodeTypes,
 } from '@xyflow/react'
 import { useCallback, useEffect, useMemo, useRef, type DragEvent } from 'react'
@@ -19,11 +19,14 @@ import { useLayout } from '../ui/layout'
 import { useTheme } from '../ui/theme'
 import { toast } from '../ui/toast'
 import NodeCard from './NodeCard'
+import WireEdge from './WireEdge'
 import { DRAG_MIME } from './Palette'
-import { connectionProblem, useEditor, type IotNode } from './store'
+import { connectionProblem, useEditor, type IotNode, type WireEdge as WireEdgeType } from './store'
+import { anchorsOf, insertPoint, nearestSegment } from './wire'
 import { clampZoom, easeZoom, flowPointAt, MAX_ZOOM, MIN_ZOOM, sliderToZoom, viewportAround, wheelZoomFactor, zoomToSlider } from './zoom'
 
 const nodeTypes: NodeTypes = { iot: NodeCard }
+const edgeTypes: EdgeTypes = { wire: WireEdge }
 
 const nodeColor = (n: IotNode) => `var(--cat-${getDef(n.data.kind)?.category ?? 'sensor'})`
 
@@ -173,7 +176,7 @@ export default function Canvas() {
   useSmoothWheelZoom(host)
 
   // While running, colour each wire by the value it carries.
-  const styledEdges = useMemo<Edge[]>(() => {
+  const styledEdges = useMemo<WireEdgeType[]>(() => {
     if (status === 'stopped') return edges
     return edges.map((e) => {
       const v = values[e.source]?.outputs[e.sourceHandle ?? '']
@@ -198,6 +201,28 @@ export default function Canvas() {
     if (problem) toast.error(problem)
   }, [])
 
+  // Double-click a wire to add a bend right there.
+  const addBend = useCallback(
+    (e: React.MouseEvent, edge: WireEdgeType) => {
+      const store = useEditor.getState()
+      const wire = store.edges.find((x) => x.id === edge.id)
+      const src = store.nodes.find((n) => n.id === wire?.source)
+      if (!wire || !src) return
+      const p = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+      const points = wire.data?.points ?? []
+      // The line itself is not in the store, so ask the DOM where the wire's ends are drawn.
+      const el = document.querySelector(`[data-id="${edge.id}"] .wire-core`) as SVGPathElement | null
+      const total = el?.getTotalLength() ?? 0
+      const a = el?.getPointAtLength(0)
+      const b = el?.getPointAtLength(total)
+      if (!a || !b) return
+      const anchors = anchorsOf({ x: a.x, y: a.y }, points, { x: b.x, y: b.y })
+      store.beginWireEdit()
+      store.setWire(edge.id, { points: insertPoint(points, nearestSegment(anchors, p).index, p) })
+    },
+    [screenToFlowPosition],
+  )
+
   const onDragOver = (e: DragEvent) => {
     if (!e.dataTransfer.types.includes(DRAG_MIME)) return
     e.preventDefault()
@@ -217,6 +242,11 @@ export default function Canvas() {
         nodes={nodes}
         edges={styledEdges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        defaultEdgeOptions={{ type: 'wire' }}
+        elevateEdgesOnSelect
+        connectionLineStyle={{ stroke: 'var(--accent)', strokeWidth: 3.2, strokeLinecap: 'round' }}
+        onEdgeDoubleClick={addBend}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
