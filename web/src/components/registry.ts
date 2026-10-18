@@ -55,33 +55,54 @@ const analogProps = (min: number, max: number, period: number): PropDef[] => [
   { key: 'period', label: 'Periode sinus (detik)', type: 'number', default: period, min: 1, step: 1 },
 ]
 
-function analogSensorDef(
-  kind: string,
-  label: string,
-  unit: string,
-  description: string,
-  min: number,
-  max: number,
-  period: number,
-  volts: (value: number) => number,
-  needs: Needs,
-): ComponentDef {
+interface AnalogSpec {
+  kind: string
+  label: string
+  unit: string
+  description: string
+  min: number
+  max: number
+  period: number
+  needs: Needs
+  /** The voltage on the analog pin for a reading; `inputs` holds the supply the part is wired to. */
+  volts: (value: number, inputs: Record<string, Value | undefined>) => number
+  pattern?: string
+  /** Port id of the analog output, `out` unless a module names its pins differently. */
+  port?: string
+  /** Other outputs derived from the reading, such as a comparator's digital pin. */
+  also?: { ports: PortDef[]; props?: PropDef[]; compute: (value: number, props: Props) => Record<string, Value> }
+}
+
+const vccOf = (inputs: Record<string, Value | undefined>) => (typeof inputs.vcc === 'number' ? inputs.vcc : 5)
+
+function analogSensorDef(spec: AnalogSpec): ComponentDef {
+  const port = spec.port ?? 'out'
+  const props = analogProps(spec.min, spec.max, spec.period).map((p): PropDef => (p.key === 'pattern' && p.type === 'select' && spec.pattern ? { ...p, default: spec.pattern } : p))
   return {
-    kind,
-    label,
+    kind: spec.kind,
+    label: spec.label,
     category: 'sensor',
-    unit,
-    description,
+    unit: spec.unit,
+    description: spec.description,
     view: 'analog',
     inputs: [vccIn, gndIn],
-    outputs: [{ id: 'out', label: 'nilai', type: 'number' }],
-    needs,
-    props: analogProps(min, max, period),
-    volts: (value) => clamp(volts(value), 0, 5),
-    step: (ctx) => (supplyState(needs, ctx.inputs) === 'ok' ? analogSensor(ctx) : {}),
+    outputs: [{ id: port, label: 'nilai', type: 'number' }, ...(spec.also?.ports ?? [])],
+    needs: spec.needs,
+    props: [...props, ...(spec.also?.props ?? [])],
+    volts: (value, _props, inputs) => clamp(spec.volts(value, inputs), 0, 5),
+    step: (ctx) => {
+      if (supplyState(spec.needs, ctx.inputs) !== 'ok') return {}
+      const value = analogSensor(ctx).out
+      if (typeof value !== 'number') return {}
+      return { [port]: value, ...(spec.also?.compute(value, ctx.props) ?? {}) }
+    },
   }
 }
 
+/** Resistance of a 10k NTC with beta 3950 at the given temperature, in ohms. */
+const ntcOhms = (celsius: number) => 10000 * Math.exp(3950 * (1 / (celsius + 273.15) - 1 / 298.15))
+
+const rgbPort = (id: string, label: string): PortDef => ({ id, label, type: 'boolean' })
 
 const UNO_PROGRAM = `# A0 = suhu (angka), D2..D7 = masukan ya/tidak, D8..D13 = keluaran.
 # Kipas di D13 menyala kalau suhu di atas 30.
@@ -240,9 +261,176 @@ export const COMPONENTS: ComponentDef[] = [
   },
 
   // Sensors
-  analogSensorDef('temp-sensor', 'Sensor suhu', '°C', 'Seperti LM35: 10 mV per °C, jadi analogRead(A0) * 500.0 / 1023.0 memberi suhu.', 20, 40, 30, (c) => c * 0.01, { min: 4, max: 20 }),
-  analogSensorDef('humidity-sensor', 'Sensor kelembapan', '%', 'Keluaran analog 0 sampai 5 V untuk 0 sampai 100 %: analogRead(A0) * 100.0 / 1023.0.', 30, 90, 40, (h) => (h / 100) * 5, { min: 3, max: 5.5 }),
-  analogSensorDef('light-sensor', 'Sensor cahaya', 'lux', 'Modul LDR: 0 sampai 1000 lux menjadi 0 sampai 5 V, jadi analogRead(A0) * 1000.0 / 1023.0.', 0, 1000, 25, (lux) => (lux / 1000) * 5, { min: 3, max: 5.5 }),
+  analogSensorDef({
+    kind: 'temp-sensor',
+    label: 'Sensor suhu (LM35)',
+    unit: '°C',
+    description: 'LM35: 10 mV per °C, jadi analogRead(A0) * 500.0 / 1023.0 memberi suhu.',
+    min: 20,
+    max: 40,
+    period: 30,
+    needs: { min: 4, max: 20 },
+    volts: (c) => c * 0.01,
+  }),
+  analogSensorDef({
+    kind: 'ntc-sensor',
+    label: 'Sensor suhu (NTC)',
+    unit: '°C',
+    description: 'Termistor NTC 10k (beta 3950) dengan resistor 10k, seperti contoh Arduino-nya.',
+    min: 10,
+    max: 40,
+    period: 30,
+    needs: { min: 3, max: 5.5 },
+    volts: (c, i) => {
+      const r = ntcOhms(c)
+      return (vccOf(i) * r) / (r + 10000)
+    },
+  }),
+  analogSensorDef({
+    kind: 'humidity-sensor',
+    label: 'Sensor kelembapan',
+    unit: '%',
+    description: 'Keluaran analog 0 sampai 5 V untuk 0 sampai 100 %: analogRead(A0) * 100.0 / 1023.0.',
+    min: 30,
+    max: 90,
+    period: 40,
+    needs: { min: 3, max: 5.5 },
+    volts: (h) => (h / 100) * 5,
+  }),
+  analogSensorDef({
+    kind: 'light-sensor',
+    label: 'Sensor cahaya (LDR)',
+    unit: 'lux',
+    description: 'Modul LDR: 0 sampai 1000 lux menjadi 0 sampai 5 V, jadi analogRead(A0) * 1000.0 / 1023.0.',
+    min: 0,
+    max: 1000,
+    period: 25,
+    needs: { min: 3, max: 5.5 },
+    volts: (lux) => (lux / 1000) * 5,
+  }),
+  analogSensorDef({
+    kind: 'pot',
+    label: 'Potensiometer',
+    unit: '%',
+    description: 'Pembagi tegangan: SIG = VCC × posisi putaran, jadi analogRead(A0) bernilai 0 sampai 1023 sesuai putaran.',
+    min: 0,
+    max: 100,
+    period: 20,
+    pattern: 'manual',
+    port: 'out',
+    needs: { min: 1, max: 12 },
+    volts: (pos, i) => (vccOf(i) * pos) / 100,
+  }),
+  analogSensorDef({
+    kind: 'gas-sensor',
+    label: 'Sensor gas (MQ-2)',
+    unit: 'ppm',
+    description: 'AO naik bersama kadar gas (0 sampai 1000 ppm menjadi 0 sampai 5 V); DO menyala di atas ambang batas.',
+    min: 0,
+    max: 1000,
+    period: 30,
+    port: 'ao',
+    needs: { min: 4.5, max: 5.5 },
+    volts: (ppm) => (ppm / 1000) * 5,
+    also: {
+      ports: [{ id: 'do', label: 'DO', type: 'boolean' }],
+      props: [{ key: 'threshold', label: 'Ambang batas DO (ppm)', type: 'number', default: 400, min: 0, step: 10 }],
+      compute: (ppm, props) => ({ do: ppm > num(props, 'threshold', 400) }),
+    },
+  }),
+  analogSensorDef({
+    kind: 'soil-sensor',
+    label: 'Sensor kelembapan tanah',
+    unit: '%',
+    description: 'Sensor kapasitif: makin basah tanahnya, makin rendah tegangannya (2,8 V kering sampai 1,2 V basah).',
+    min: 20,
+    max: 80,
+    period: 40,
+    needs: { min: 3, max: 5.5 },
+    volts: (wet) => 2.8 - 1.6 * (wet / 100),
+  }),
+  analogSensorDef({
+    kind: 'slide-pot',
+    label: 'Potensiometer geser',
+    unit: '%',
+    description: 'Seperti potensiometer putar, tetapi digeser: SIG = VCC × posisi.',
+    min: 0,
+    max: 100,
+    period: 20,
+    pattern: 'manual',
+    needs: { min: 1, max: 12 },
+    volts: (pos, i) => (vccOf(i) * pos) / 100,
+  }),
+  analogSensorDef({
+    kind: 'flame-sensor',
+    label: 'Sensor api',
+    unit: '%',
+    description: 'Modul inframerah: AOUT turun saat ada api (5 V tanpa api), DOUT menyala di atas ambang batas.',
+    min: 0,
+    max: 100,
+    period: 30,
+    port: 'ao',
+    needs: { min: 3, max: 5.5 },
+    volts: (v) => 5 * (1 - v / 100),
+    also: {
+      ports: [{ id: 'do', label: 'DOUT', type: 'boolean' }],
+      props: [{ key: 'threshold', label: 'Ambang batas DOUT (%)', type: 'number', default: 50, min: 0, max: 100, step: 5 }],
+      compute: (v, props) => ({ do: v > num(props, 'threshold', 50) }),
+    },
+  }),
+  analogSensorDef({
+    kind: 'sound-sensor',
+    label: 'Sensor suara',
+    unit: 'dB',
+    description: 'Mikrofon: AOUT naik bersama kerasnya suara (30 sampai 110 dB menjadi 0 sampai 5 V), DOUT menyala di atas ambang batas.',
+    min: 30,
+    max: 110,
+    period: 12,
+    port: 'ao',
+    needs: { min: 3, max: 5.5 },
+    volts: (db) => (5 * (db - 30)) / 80,
+    also: {
+      ports: [{ id: 'do', label: 'DOUT', type: 'boolean' }],
+      props: [{ key: 'threshold', label: 'Ambang batas DOUT (dB)', type: 'number', default: 70, min: 30, max: 110, step: 5 }],
+      compute: (db, props) => ({ do: db > num(props, 'threshold', 70) }),
+    },
+  }),
+  {
+    kind: 'tilt-switch',
+    label: 'Sakelar miring',
+    category: 'sensor',
+    description: 'OUT tinggi saat modul dimiringkan.',
+    view: 'digital',
+    inputs: [vccIn, gndIn],
+    outputs: [bool('out', 'OUT')],
+    needs: { min: 3, max: 5.5 },
+    props: [{ key: 'tilted', label: 'Miring', type: 'boolean', default: false }],
+    step: (ctx) => ({ out: supplyState({ min: 3, max: 5.5 }, ctx.inputs) === 'ok' && ctx.props.tilted === true }),
+  },
+  {
+    kind: 'joystick',
+    label: 'Joystick (KY-023)',
+    category: 'sensor',
+    description: 'Dua sumbu analog (2,5 V di tengah) dan tombol tekan. Geser tuas di komponen.',
+    view: 'analog',
+    inputs: [vccIn, gndIn],
+    outputs: [
+      { id: 'x', label: 'VRx', type: 'number' },
+      { id: 'y', label: 'VRy', type: 'number' },
+      { id: 'sw', label: 'SW', type: 'boolean' },
+    ],
+    needs: { min: 3, max: 5.5 },
+    props: [
+      { key: 'x', label: 'Sumbu X (−100 sampai 100)', type: 'number', default: 0, min: -100, max: 100, step: 5 },
+      { key: 'y', label: 'Sumbu Y (−100 sampai 100)', type: 'number', default: 0, min: -100, max: 100, step: 5 },
+      { key: 'pressed', label: 'Tombol ditekan', type: 'boolean', default: false },
+    ],
+    volts: (value, _props, inputs) => clamp((vccOf(inputs) * (1 + value / 100)) / 2, 0, 5),
+    step: (ctx): Record<string, Value> =>
+      supplyState({ min: 3, max: 5.5 }, ctx.inputs) === 'ok'
+        ? { x: clamp(num(ctx.props, 'x'), -100, 100), y: clamp(num(ctx.props, 'y'), -100, 100), sw: ctx.props.pressed === true }
+        : {},
+  },
   {
     kind: 'pir-sensor',
     label: 'Sensor gerak (PIR)',
@@ -405,6 +593,18 @@ export const COMPONENTS: ComponentDef[] = [
         ],
       },
     ],
+    step: () => ({}),
+  },
+  {
+    kind: 'rgb-led',
+    label: 'LED RGB',
+    category: 'actuator',
+    description: 'LED tiga warna katoda bersama. Tiap kaki warna menyala sendiri atau dengan PWM, dan warnanya bercampur.',
+    view: 'led',
+    inputs: [rgbPort('r', 'R'), rgbPort('g', 'G'), rgbPort('b', 'B'), gndIn],
+    needs: 'gnd',
+    outputs: [],
+    props: [],
     step: () => ({}),
   },
   {

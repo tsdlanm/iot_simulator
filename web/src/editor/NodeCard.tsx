@@ -1,9 +1,10 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { memo, type CSSProperties } from 'react'
 import BoardArt from '../components/boards/BoardArt'
-import PartArt from '../components/parts/PartArt'
 import { PART_LAYOUTS } from '../components/parts/layout'
-import { getDef, SUPPLY_TEXT, supplyState } from '../components/registry'
+import { hasWokwi } from '../components/parts/wokwi'
+import PartCard from './PartCard'
+import { getDef } from '../components/registry'
 import type { BoardPin, ComponentDef, PortDef } from '../components/types'
 import { useSim } from '../sim/runner'
 import ComponentIcon from '../ui/ComponentIcon'
@@ -148,97 +149,11 @@ function BoardCard({ id, def, selected }: { id: string; def: ComponentDef; selec
 }
 
 
-/** A sensor or actuator drawn as the real part, with a wire handle on the end of each usable leg. */
-function PartCard({ id, def, props, selected }: { id: string; def: ComponentDef; props: Record<string, number | string | boolean>; selected: boolean }) {
-  const layout = PART_LAYOUTS[def.kind]!
-  const values = useSim((s) => s.values[id])
-  const updateProp = useEditor((s) => s.updateProp)
-
-  const out = values?.outputs.out
-  const input = values?.inputs.in
-  // A PWM pin reports how much of the time it is high; a plain signal is simply all or nothing.
-  const driven = values?.inputs.in === undefined ? 0 : (values.levels?.in ?? (input === true ? 1 : 0))
-  const lo = Math.min(Number(props.min), Number(props.max))
-  const hi = Math.max(Number(props.min), Number(props.max))
-  const manual = props.pattern === 'manual'
-  // Without a supply the part does nothing, like the real one.
-  const supply = supplyState(def.needs, values?.inputs ?? {})
-  const powered = supply === 'ok' || !values
-
-  let level = powered ? driven : 0
-  let active = powered && driven >= 0.5
-  if (def.view === 'analog') level = typeof out === 'number' && hi > lo ? (out - lo) / (hi - lo) : 0.5
-  if (def.kind === 'pir-sensor') active = powered && out === true
-  if (def.kind === 'button') active = props.pressed === true
-
-  return (
-    <div className={`part-node ${selected ? 'node-selected' : ''}`} style={{ width: layout.width }}>
-      <div className={active && def.kind === 'led' ? 'led-on' : active && def.kind === 'fan' ? 'fan-on' : active && def.kind === 'buzzer' ? 'buzzer-on' : undefined}>
-        <PartArt kind={def.kind} state={{ level, active, color: String(props.color ?? 'amber') }} />
-      </div>
-      {layout.pins
-        .filter((p) => p.port)
-        .map((p) => {
-          const outPort = def.outputs.find((o) => o.id === p.port)
-          const port = outPort ?? def.inputs.find((i) => i.id === p.port)
-          if (!port) return null
-          const v = outPort ? values?.outputs[p.port!] : values?.inputs[p.port!]
-          const style: CSSProperties = { left: p.x, top: p.y, right: 'auto', bottom: 'auto', transform: 'translate(-50%, -50%)' }
-          return (
-            <Handle
-              key={p.port}
-              id={p.port}
-              type={outPort ? 'source' : 'target'}
-              position={SIDE[p.side]}
-              className={`pin pin-${outPort ? 'out' : 'in'} port-${port.type} ${v === true || (typeof v === 'number' && v !== 0 && port.type !== 'power') ? 'pin-on' : ''}`}
-              style={style}
-              title={`${def.label}: ${p.label} (${PORT_TEXT[port.type]})`}
-            />
-          )
-        })}
-      <div className="part-info">
-        <span className="part-name">{def.label}</span>
-        {!powered && <span className="part-warn">{SUPPLY_TEXT[supply]}</span>}
-        {def.view === 'analog' && (
-          <>
-            <span className="readout">{fmt(powered ? (out ?? (manual ? Number(props.value) : undefined)) : undefined, def.unit)}</span>
-            {manual && (
-              <input
-                type="range"
-                className="slider nodrag nopan"
-                aria-label={`Nilai ${def.label}`}
-                min={lo}
-                max={hi}
-                step={(hi - lo) / 200 || 1}
-                value={Number(props.value)}
-                onChange={(e) => updateProp(id, 'value', Number(e.target.value))}
-              />
-            )}
-          </>
-        )}
-        {def.kind === 'pir-sensor' &&
-          (manual ? (
-            <button type="button" className={`toggle nodrag ${props.detected === true ? 'toggle-on' : ''}`} aria-pressed={props.detected === true} onClick={() => updateProp(id, 'detected', props.detected !== true)}>
-              {props.detected === true ? 'Ada gerakan' : 'Tidak ada gerakan'}
-            </button>
-          ) : (
-            <span className={`pill ${out === true ? 'pill-on' : ''}`}>{out === true ? 'Gerak' : 'Diam'}</span>
-          ))}
-        {def.kind === 'button' && (
-          <button type="button" className={`toggle nodrag ${props.pressed === true ? 'toggle-on' : ''}`} aria-pressed={props.pressed === true} onClick={() => updateProp(id, 'pressed', props.pressed !== true)}>
-            {props.pressed === true ? 'Ditekan' : 'Lepas'}
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
 function NodeCard({ id, data, selected }: NodeProps<IotNode>) {
   const def = getDef(data.kind)
   if (!def) return <div className="node node-unknown">Komponen tidak dikenal: {data.kind}</div>
   if (def.view === 'board' && def.board) return <BoardCard id={id} def={def} selected={selected} />
-  if (PART_LAYOUTS[def.kind]) return <PartCard id={id} def={def} props={data.props} selected={selected} />
+  if (PART_LAYOUTS[def.kind] || hasWokwi(def.kind)) return <PartCard id={id} def={def} props={data.props} selected={selected} />
 
   const rows = Math.max(def.inputs.length, def.outputs.length)
   return (

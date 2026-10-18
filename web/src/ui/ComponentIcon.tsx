@@ -34,6 +34,46 @@ const PATHS: Record<string, ReactNode> = {
     </>
   ),
   'power-5v': <path d="M13 2 4 14h7l-1 8 9-12h-7z" />,
+  'ntc-sensor': <path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z M10 16h4" />,
+  pot: (
+    <>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 12 16 7" />
+    </>
+  ),
+  'slide-pot': (
+    <>
+      <path d="M3 12h18" />
+      <rect x="9" y="7" width="5" height="10" rx="1.5" />
+    </>
+  ),
+  joystick: (
+    <>
+      <circle cx="12" cy="9" r="4" />
+      <path d="M12 13v5M7 20h10" />
+    </>
+  ),
+  'gas-sensor': <path d="M4 9h12a3 3 0 1 0-3-3M4 14h15a3 3 0 1 1-3 3M4 19h7" />,
+  'flame-sensor': <path d="M12 22a6 6 0 0 0 6-6c0-3-2-5-3-7-1 1.5-2 2-3 2 0-3-1-6-3-8-1 4-5 6-5 12a6 6 0 0 0 8 7z" />,
+  'sound-sensor': (
+    <>
+      <path d="M11 5 6 9H3v6h3l5 4z" />
+      <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
+    </>
+  ),
+  'soil-sensor': <path d="M12 3c3 4 5 6.5 5 9a5 5 0 0 1-10 0c0-2.5 2-5 5-9zM4 21h16" />,
+  'tilt-switch': (
+    <>
+      <rect x="5" y="9" width="14" height="6" rx="3" transform="rotate(-20 12 12)" />
+      <circle cx="9" cy="13" r="1.4" fill="currentColor" />
+    </>
+  ),
+  'rgb-led': (
+    <>
+      <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
+      <path d="M9 18h6M10 22h4" />
+    </>
+  ),
   led: (
     <>
       <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />

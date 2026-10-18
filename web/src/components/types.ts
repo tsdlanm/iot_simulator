@@ -85,7 +85,7 @@ export interface ComponentDef {
   /** Sources of power: the voltage each power output holds (ground outputs hold 0). */
   supply?: Record<string, number>
   /** Sensors with an analog output: the voltage at the pin for a given reading. */
-  volts?: (value: number, props: Props) => number
+  volts?: (value: number, props: Props, inputs: Record<string, Value | undefined>, port: string) => number
   /** Boards: how much of the time each output pin is high (0 to 1), so PWM can dim an LED or slow a fan. */
   levels?: (ctx: { id: string }) => Record<string, number>
   step: (ctx: StepContext) => Record<string, Value>

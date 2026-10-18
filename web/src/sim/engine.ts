@@ -119,7 +119,7 @@ export function stepEngine(graph: Graph, state: EngineState, dt: number): void {
       if (level !== undefined) levels[port.id] = level
       const from = edge && nodeById.get(edge.source)
       const toVolts = from && getDef(from.kind)?.volts
-      if (typeof v === 'number' && from && toVolts) volts[port.id] = toVolts(v, from.props)
+      if (typeof v === 'number' && from && toVolts) volts[port.id] = toVolts(v, from.props, values[from.id]?.inputs ?? {}, edge!.sourceHandle)
     }
 
     const nodeState = (state.nodeState[id] ??= {})

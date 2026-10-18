@@ -11,7 +11,8 @@ Aplikasi web untuk merancang sistem IoT secara visual lalu menyimulasikannya lan
 - Kabel divalidasi: tipe harus cocok (angka ke angka, ya/tidak ke ya/tidak), satu kabel per masukan, tanpa loop
 - **Arduino Uno menjalankan kode Arduino C++ sungguhan.** Tulis sketch di tab **Kode**, tekan **Run**: server mengompilasinya dengan avr-gcc asli dan hasilnya dijalankan oleh emulator ATmega328P (`avr8js`) di browser, tanpa unggah file. Ada serial monitor dan pesan error per baris
 - **3 papan dengan gambar dan pin asli:** Arduino Uno, ESP32 DevKit (30 pin), Raspberry Pi Pico (40 pin). ESP32 dan Pico masih memakai bahasa mini (lihat di bawah); Uno bisa dialihkan ke bahasa mini lewat tombol **Sederhana**
-- 15 komponen lain: sensor (suhu, kelembapan, cahaya, gerak, tombol), logika (pembanding, AND, OR, NOT, timer), aktuator (LED, kipas, buzzer), tampilan (gauge, grafik)
+- **Sensor dan aktuator berwujud asli** (gambar dari [wokwi-elements](https://github.com/wokwi/wokwi-elements), MIT; lihat NOTICE.md), setiap kakinya bisa dikabel: sensor suhu LM35 dan NTC, kelembapan, cahaya (LDR), tanah, gas (MQ-2), api, suara, gerak (PIR), sakelar miring, potensiometer putar dan geser, joystick, tombol; aktuator LED, LED RGB, buzzer, kipas dengan modul relay. Potensiometer, joystick, dan tombol bisa diputar atau ditekan langsung di kanvas. Plus logika (pembanding, AND, OR, NOT, timer), catu daya, dan tampilan (gauge, grafik)
+- **Validasi daya:** tiap komponen butuh VCC dan GND dengan tegangan yang cocok, seperti aslinya
 - Panel properti untuk mengatur tiap komponen. Untuk papan mikrokontroler, programnya diedit di **editor kode** penuh (CodeMirror): nomor baris, pewarnaan sintaks, saran nama pin (`Ctrl+Space`), dan kesalahan digarisbawahi di barisnya
 - **Alat pilih dan tangan:** seret area kosong untuk memilih banyak komponen sekaligus lalu hapus, duplikat, atau pindahkan bersama; alat tangan (atau `Space` + seret) menggeser kanvas
 - **Zoom halus** dengan roda mouse ke arah kursor (10%–300%), slider zoom, dan tombol "tampilkan semua"
@@ -39,8 +40,8 @@ Papan Uno memakai C++ Arduino. Alurnya seperti Wokwi: **kompilasi di server, emu
 
 - Pin keluaran D8–D13 disambung ke aktuator; masukan D2–D7 (ya/tidak) dan A0–A5 (angka) dari sensor. Pin PWM dibaca menyala bila duty cycle ≥ 50%.
 - Tombol yang ditekan terbaca HIGH; bila pin memakai `INPUT_PULLUP`, terbaca LOW (seperti tombol ke GND).
-- Masukan analog dipetakan lewat properti *Nilai sensor di 0 V / 5 V* (bawaan 0 dan 500, jadi `analogRead(A0) * 500.0 / 1023.0` menghasilkan derajat Celsius).
-- Belum didukung: library di luar inti Arduino (Servo, Wire, SoftwareSerial, dst.), `tone()`, dan komponen yang butuh waktu presisi (servo, HC-SR04, DHT22, OLED I2C). Hanya satu papan: Uno.
+- Sensor analog memberi tegangan asli ke ADC (LM35: 10 mV per °C, jadi `analogRead(A0) * 500.0 / 1023.0` menghasilkan derajat Celsius).
+- Belum didukung: library di luar inti Arduino (Servo, Wire, SoftwareSerial, dst.), `tone()`, dan komponen yang butuh waktu presisi (servo, HC-SR04, protokol DHT22, OLED I2C). Sensor kelembapan di sini bersifat analog (tampilannya seperti DHT22, tetapi tidak memakai protokolnya). Hanya satu papan: Uno.
 - Pengeditan kode tidak berlaku saat berjalan: tekan Reset lalu Run.
 
 ## Bahasa mini (ESP32, Pico, dan Uno mode Sederhana)
