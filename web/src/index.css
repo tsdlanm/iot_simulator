@@ -311,6 +311,13 @@ select:hover, input[type='number']:hover { border-color: var(--border); }
 .port-label-in { left: 12px; }
 .port-label-out { right: 12px; }
 
+.actuator { display: grid; justify-items: center; }
+.fan-rotor.spinning { animation: spin var(--spin, 0.6s) linear infinite; }
+.buzzer-on .part-art { animation: shake 0.15s linear infinite; }
+.sensor { display: grid; gap: 4px; justify-items: center; }
+.sensor .readout { justify-content: center; }
+.part-art { width: 100%; max-width: 132px; height: 64px; }
+.slider { width: 100%; margin: 2px 0 0; accent-color: var(--accent); cursor: pointer; }
 .readout { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .detail { font-size: 12px; font-weight: 400; color: var(--muted); }
 .pill { padding: 1px 8px; font-size: 12px; color: var(--muted); background: var(--panel-2); border-radius: 99px; }
@@ -318,14 +325,6 @@ select:hover, input[type='number']:hover { border-color: var(--border); }
 .toggle { padding: 5px 12px; background: var(--panel-2); border: 0; border-radius: 99px; }
 .toggle-on { background: var(--live); color: var(--accent-text); font-weight: 600; }
 
-.led { width: 26px; height: 26px; border-radius: 50%; background: var(--panel-2); border: 2px solid var(--border); transition: background 0.1s, box-shadow 0.1s; }
-.led-on.led-amber { background: #ffc233; box-shadow: 0 0 14px #ffc233; border-color: #ffc233; }
-.led-on.led-green { background: #3ddc84; box-shadow: 0 0 14px #3ddc84; border-color: #3ddc84; }
-.led-on.led-red { background: #ff5a4d; box-shadow: 0 0 14px #ff5a4d; border-color: #ff5a4d; }
-.led-on.led-blue { background: #4d9bff; box-shadow: 0 0 14px #4d9bff; border-color: #4d9bff; }
-.fan, .buzzer { display: inline-block; line-height: 0; color: var(--muted); opacity: 0.55; }
-.fan-on { color: var(--cat-actuator); opacity: 1; animation: spin 0.6s linear infinite; }
-.buzzer-on { color: var(--cat-actuator); opacity: 1; animation: shake 0.15s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes shake { 25% { transform: rotate(-12deg); } 75% { transform: rotate(12deg); } }
 .bar { height: 6px; margin-top: 6px; background: var(--panel-2); border-radius: 99px; overflow: hidden; }
@@ -355,7 +354,7 @@ select:hover, input[type='number']:hover { border-color: var(--border); }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .fan-on, .buzzer-on, .status-running i, .toast, .react-flow__edge.wire-live .wire-flow { animation: none; }
+  .fan-rotor.spinning, .buzzer-on .part-art, .status-running i, .toast, .react-flow__edge.wire-live .wire-flow { animation: none; }
   .app { transition: none; }
 }
 

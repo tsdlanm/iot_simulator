@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { defaultProps, getDef } from '../components/registry'
 import { createEngineState, stepEngine, topoOrder, wouldCreateCycle, type Graph, type GraphNode } from './engine'
 
@@ -187,5 +187,53 @@ describe('microcontroller boards', () => {
     const state = createEngineState()
     stepEngine(graph, state, 100)
     expect(state.values.g.inputs.in).toBeUndefined()
+  })
+})
+
+describe('sensors and actuators', () => {
+  it('gives analog sensors an electrical output for the emulator', () => {
+    const volts = (kind: string, props: Record<string, number | string | boolean>) => {
+      const graph: Graph = { nodes: [node('s', kind, { pattern: 'manual', ...props }), node('u', 'mcu-uno')], edges: [edge('s', 'out', 'u', 'A0')] }
+      const spy = vi.spyOn(getDef('mcu-uno')!, 'step')
+      stepEngine(graph, createEngineState(), 100)
+      const got = spy.mock.calls[0]![0].volts.A0
+      spy.mockRestore()
+      return got
+    }
+    expect(volts('temp-sensor', { value: 30, min: 0, max: 100 })).toBeCloseTo(0.3) // LM35: 10 mV per degree
+    expect(volts('humidity-sensor', { value: 50, min: 0, max: 100 })).toBeCloseTo(2.5)
+    expect(volts('light-sensor', { value: 1000, min: 0, max: 1000 })).toBeCloseTo(5)
+    expect(volts('temp-sensor', { value: 900, min: 0, max: 1000 })).toBe(5) // never above the 5 V rail
+  })
+
+  it('manual sensors hold the value you set, within their range', () => {
+    const run = (value: number) => {
+      const s = createEngineState()
+      stepEngine({ nodes: [node('t', 'temp-sensor', { pattern: 'manual', value, min: 0, max: 50 })], edges: [] }, s, 100)
+      return s.values.t.outputs.out
+    }
+    expect(run(23)).toBe(23)
+    expect(run(99)).toBe(50)
+  })
+
+  it('a manual PIR follows its switch', () => {
+    const run = (detected: boolean) => {
+      const s = createEngineState()
+      stepEngine({ nodes: [node('p', 'pir-sensor', { pattern: 'manual', detected })], edges: [] }, s, 100)
+      return s.values.p.outputs.out
+    }
+    expect(run(true)).toBe(true)
+    expect(run(false)).toBe(false)
+  })
+
+  it('carries a PWM level from a board pin to the actuator wired to it', () => {
+    const def = getDef('mcu-uno')!
+    const orig = def.levels
+    def.levels = () => ({ D9: 0.25 })
+    const graph: Graph = { nodes: [node('u', 'mcu-uno', { mode: 'cpp' }), node('l', 'led')], edges: [edge('u', 'D9', 'l', 'in')] }
+    const s = createEngineState()
+    stepEngine(graph, s, 100)
+    def.levels = orig
+    expect(s.values.l.levels).toEqual({ in: 0.25 })
   })
 })

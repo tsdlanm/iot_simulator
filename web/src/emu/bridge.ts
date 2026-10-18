@@ -70,15 +70,16 @@ export async function prepare(nodes: PlainNode[]): Promise<PrepareResult> {
   return { ok: true }
 }
 
-const toVolts = (value: Value | undefined, props: Props) => {
-  if (typeof value !== 'number') return 0
-  const lo = typeof props.adcMin === 'number' ? props.adcMin : 0
-  const hi = typeof props.adcMax === 'number' ? props.adcMax : 500
-  return hi === lo ? 0 : ((value - lo) / (hi - lo)) * 5
+/** How much of the time each output pin was high, for PWM brightness and fan speed. */
+export function levels(id: string): Record<string, number> {
+  const r = running.get(id)
+  const out: Record<string, number> = {}
+  if (r) for (const pin of OUTPUT_PINS) out[`D${pin}`] = r.duty[pin] ?? 0
+  return out
 }
 
-/** Gives a board's emulator the circuit's current inputs and returns what its output pins are doing. */
-export function exchange(id: string, inputs: Record<string, Value | undefined>, props: Props): Record<string, Value> {
+/** Gives a board's emulator the circuit's current inputs (analog ones as volts) and returns what its output pins are doing. */
+export function exchange(id: string, inputs: Record<string, Value | undefined>, volts: Record<string, number>): Record<string, Value> {
   const out: Record<string, Value> = {}
   for (const pin of OUTPUT_PINS) out[`D${pin}`] = false
   const r = running.get(id)
@@ -87,7 +88,7 @@ export function exchange(id: string, inputs: Record<string, Value | undefined>, 
   const digital: Record<number, boolean> = {}
   for (const pin of INPUT_PINS) digital[pin] = inputs[`D${pin}`] === true
   const analog: Record<number, number> = {}
-  for (let ch = 0; ch < ANALOG_PINS; ch++) analog[ch] = toVolts(inputs[`A${ch}`], props)
+  for (let ch = 0; ch < ANALOG_PINS; ch++) analog[ch] = volts[`A${ch}`] ?? 0
 
   const key = JSON.stringify([digital, analog])
   if (key !== r.sent) {

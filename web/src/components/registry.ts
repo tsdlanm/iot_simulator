@@ -1,4 +1,4 @@
-import { CPP_KIND, exchange } from '../emu/bridge'
+import { CPP_KIND, exchange, levels } from '../emu/bridge'
 import { compileCached, execute, MAX_PROGRAM_LENGTH, type PinSpec } from '../sim/firmware'
 import { ESP32, PICO, UNO } from './boards'
 import type { BoardLayout, Category, ComponentDef, Props, PropDef, StepContext, Value } from './types'
@@ -29,6 +29,8 @@ function analogSensor(ctx: StepContext): Record<string, Value> {
       ctx.state.v = v
       return { out: v }
     }
+    case 'manual':
+      return { out: clamp(num(ctx.props, 'value', mid), lo, hi) }
     default:
       return { out: mid }
   }
@@ -44,8 +46,10 @@ const analogProps = (min: number, max: number, period: number): PropDef[] => [
       { value: 'sine', label: 'Gelombang sinus' },
       { value: 'random', label: 'Acak halus' },
       { value: 'constant', label: 'Tetap (tengah rentang)' },
+      { value: 'manual', label: 'Manual (geser di komponen)' },
     ],
   },
+  { key: 'value', label: 'Nilai manual', type: 'number', default: (min + max) / 2, step: 1 },
   { key: 'min', label: 'Nilai minimum', type: 'number', default: min, step: 1 },
   { key: 'max', label: 'Nilai maksimum', type: 'number', default: max, step: 1 },
   { key: 'period', label: 'Periode sinus (detik)', type: 'number', default: period, min: 1, step: 1 },
@@ -59,6 +63,7 @@ function analogSensorDef(
   min: number,
   max: number,
   period: number,
+  volts: (value: number) => number,
 ): ComponentDef {
   return {
     kind,
@@ -70,6 +75,7 @@ function analogSensorDef(
     inputs: [],
     outputs: [{ id: 'out', label: 'nilai', type: 'number' }],
     props: analogProps(min, max, period),
+    volts: (value) => clamp(volts(value), 0, 5),
     step: analogSensor,
   }
 }
@@ -112,7 +118,7 @@ export function pinSpec(board: BoardLayout): PinSpec {
 /** Longest Arduino sketch the compile service accepts. */
 export const SKETCH_LIMIT = 64 * 1024
 
-export const UNO_SKETCH = `// A0 = sensor suhu (0 V = 0 °C, 5 V = 500 °C)
+export const UNO_SKETCH = `// A0 = sensor suhu LM35 (10 mV per °C)
 const int KIPAS = 13;
 const int LAMPU = 12;
 
@@ -151,8 +157,6 @@ const UNO_PROPS: PropDef[] = [
     ],
   },
   { key: 'sketch', label: 'Sketch', type: 'code', default: UNO_SKETCH, hidden: true, rows: 14, maxLength: SKETCH_LIMIT },
-  { key: 'adcMin', label: 'Nilai sensor di 0 V', type: 'number', default: 0, step: 1 },
-  { key: 'adcMax', label: 'Nilai sensor di 5 V', type: 'number', default: 500, step: 1 },
 ]
 
 function boardDef(kind: string, label: string, description: string, board: BoardLayout, program: string, extra: PropDef[] = []): ComponentDef {
@@ -169,8 +173,9 @@ function boardDef(kind: string, label: string, description: string, board: Board
       .map((p) => ({ id: p.id, label: p.label, type: p.role === 'in-num' ? ('number' as const) : ('boolean' as const) })),
     outputs: board.pins.filter((p) => p.role === 'out').map((p) => ({ id: p.id, label: p.label, type: 'boolean' as const })),
     props: [{ key: 'program', label: 'Program', type: 'code', default: program, hidden: true, rows: 10, maxLength: MAX_PROGRAM_LENGTH }, ...extra],
+    ...(kind === CPP_KIND ? { levels: ({ id }: { id: string }) => levels(id) } : {}),
     step: (ctx) => {
-      if (kind === CPP_KIND && ctx.props.mode !== 'simple') return exchange(ctx.id, ctx.inputs, ctx.props)
+      if (kind === CPP_KIND && ctx.props.mode !== 'simple') return exchange(ctx.id, ctx.inputs, ctx.volts)
       const source = typeof ctx.props.program === 'string' ? ctx.props.program : ''
       return execute(compileCached(kind, source, pins), pins, ctx.inputs, ctx.time / 1000)
     },
@@ -188,9 +193,9 @@ export const COMPONENTS: ComponentDef[] = [
   boardDef('mcu-pico', 'Raspberry Pi Pico', 'Raspberry Pi Pico (RP2040) dengan 40 pin. Tiga masukan analog GP26 sampai GP28.', PICO, PICO_PROGRAM),
 
   // Sensors
-  analogSensorDef('temp-sensor', 'Sensor suhu', '°C', 'Menghasilkan suhu dalam derajat Celsius.', 20, 40, 30),
-  analogSensorDef('humidity-sensor', 'Sensor kelembapan', '%', 'Menghasilkan kelembapan relatif.', 30, 90, 40),
-  analogSensorDef('light-sensor', 'Sensor cahaya', 'lux', 'Menghasilkan intensitas cahaya.', 0, 1000, 25),
+  analogSensorDef('temp-sensor', 'Sensor suhu', '°C', 'Seperti LM35: 10 mV per °C, jadi analogRead(A0) * 500.0 / 1023.0 memberi suhu.', 20, 40, 30, (c) => c * 0.01),
+  analogSensorDef('humidity-sensor', 'Sensor kelembapan', '%', 'Keluaran analog 0 sampai 5 V untuk 0 sampai 100 %: analogRead(A0) * 100.0 / 1023.0.', 30, 90, 40, (h) => (h / 100) * 5),
+  analogSensorDef('light-sensor', 'Sensor cahaya', 'lux', 'Modul LDR: 0 sampai 1000 lux menjadi 0 sampai 5 V, jadi analogRead(A0) * 1000.0 / 1023.0.', 0, 1000, 25, (lux) => (lux / 1000) * 5),
   {
     kind: 'pir-sensor',
     label: 'Sensor gerak (PIR)',
@@ -200,10 +205,22 @@ export const COMPONENTS: ComponentDef[] = [
     inputs: [],
     outputs: [bool('out', 'gerak')],
     props: [
+      {
+        key: 'pattern',
+        label: 'Pola',
+        type: 'select',
+        default: 'random',
+        options: [
+          { value: 'random', label: 'Acak' },
+          { value: 'manual', label: 'Manual (tombol di komponen)' },
+        ],
+      },
+      { key: 'detected', label: 'Gerakan terdeteksi (manual)', type: 'boolean', default: false },
       { key: 'chance', label: 'Peluang gerak per detik (%)', type: 'number', default: 20, min: 0, max: 100, step: 5 },
       { key: 'hold', label: 'Lama aktif (detik)', type: 'number', default: 3, min: 0.5, step: 0.5 },
     ],
     step: (ctx) => {
+      if (ctx.props.pattern === 'manual') return { out: ctx.props.detected === true }
       const until = typeof ctx.state.until === 'number' ? ctx.state.until : 0
       let active = ctx.time < until
       if (!active && Math.random() < (num(ctx.props, 'chance', 20) / 100) * (ctx.dt / 1000)) {

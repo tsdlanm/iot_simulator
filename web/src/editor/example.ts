@@ -1,4 +1,4 @@
-import { UNO_SKETCH } from '../components/registry'
+import { defaultProps, getDef, UNO_SKETCH } from '../components/registry'
 import { PROJECT_VERSION, type Project } from './serialize'
 
 type N = Project['nodes'][number]
@@ -46,7 +46,7 @@ const uno = (): Project => ({
   version: PROJECT_VERSION,
   name: 'Kipas otomatis (Arduino Uno)',
   nodes: [
-    { id: 'uno', kind: 'mcu-uno', x: 330, y: 150, props: { mode: 'cpp', sketch: UNO_SKETCH, program: UNO_PROGRAM, adcMin: 0, adcMax: 500 } },
+    { id: 'uno', kind: 'mcu-uno', x: 330, y: 150, props: { mode: 'cpp', sketch: UNO_SKETCH, program: UNO_PROGRAM } },
     { id: 'temp', kind: 'temp-sensor', x: 40, y: 520, props: { pattern: 'sine', min: 20, max: 40, period: 30 } },
     { id: 'fan', kind: 'fan', x: 540, y: 0, props: {} },
     { id: 'led', kind: 'led', x: 780, y: 0, props: { color: 'green' } },
@@ -121,13 +121,19 @@ const logic = (): Project => ({
   ],
 })
 
+/** Examples list only what they change; every other property takes its default, as when a part is dropped on the canvas. */
+const complete = (build: () => Project) => (): Project => {
+  const p = build()
+  return { ...p, nodes: p.nodes.map((n) => ({ ...n, props: { ...defaultProps(getDef(n.kind)!), ...n.props } })) }
+}
+
 export const EXAMPLES: Example[] = [
-  { id: 'uno', name: 'Kipas otomatis · Arduino Uno', build: uno },
-  { id: 'esp32', name: 'Lampu dan alarm · ESP32', build: esp32 },
-  { id: 'pico', name: 'Lampu berkedip · Raspberry Pi Pico', build: pico },
-  { id: 'logic', name: 'Kipas otomatis · tanpa papan', build: logic },
+  { id: 'uno', name: 'Kipas otomatis · Arduino Uno', build: complete(uno) },
+  { id: 'esp32', name: 'Lampu dan alarm · ESP32', build: complete(esp32) },
+  { id: 'pico', name: 'Lampu berkedip · Raspberry Pi Pico', build: complete(pico) },
+  { id: 'logic', name: 'Kipas otomatis · tanpa papan', build: complete(logic) },
 ]
 
 /** What a first-time visitor sees. */
-export const exampleProject = (): Project => uno()
-export const logicExample = (): Project => logic()
+export const exampleProject = (): Project => complete(uno)()
+export const logicExample = (): Project => complete(logic)()

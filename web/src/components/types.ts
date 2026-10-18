@@ -26,6 +26,8 @@ export type PropDef =
 export interface StepContext {
   /** Id of the node being stepped. */
   id: string
+  /** For numeric inputs fed by a sensor: the voltage that sensor puts on the wire, in volts. */
+  volts: Record<string, number>
   props: Props
   inputs: Record<string, Value | undefined>
   /** Mutable per-node state that survives between ticks. */
@@ -75,5 +77,9 @@ export interface ComponentDef {
   board?: BoardLayout
   /** When set, the engine records this input's numeric history for the node. */
   recordInput?: string
+  /** Sensors with an analog output: the voltage at the pin for a given reading. */
+  volts?: (value: number, props: Props) => number
+  /** Boards: how much of the time each output pin is high (0 to 1), so PWM can dim an LED or slow a fan. */
+  levels?: (ctx: { id: string }) => Record<string, number>
   step: (ctx: StepContext) => Record<string, Value>
 }

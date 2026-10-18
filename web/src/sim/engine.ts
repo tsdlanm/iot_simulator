@@ -23,6 +23,8 @@ export interface Graph {
 export interface NodeValues {
   inputs: Record<string, Value | undefined>
   outputs: Record<string, Value>
+  /** For inputs fed by a PWM pin: the fraction of time it is high (0 to 1). Absent for plain on/off. */
+  levels?: Record<string, number>
   history?: number[]
 }
 
@@ -88,6 +90,7 @@ export function stepEngine(graph: Graph, state: EngineState, dt: number): void {
   const nodeById = new Map(graph.nodes.map((n) => [n.id, n]))
   const edgeByTarget = new Map(graph.edges.map((e) => [`${e.target}:${e.targetHandle}`, e]))
   const outputs = new Map<string, Record<string, Value>>()
+  const levelsOut = new Map<string, Record<string, number>>()
   const values: Record<string, NodeValues> = {}
 
   for (const id of topoOrder(graph.nodes, graph.edges)) {
@@ -96,15 +99,23 @@ export function stepEngine(graph: Graph, state: EngineState, dt: number): void {
     if (!node || !def) continue
 
     const inputs: Record<string, Value | undefined> = {}
+    const volts: Record<string, number> = {}
+    const levels: Record<string, number> = {}
     for (const port of def.inputs) {
       const edge = edgeByTarget.get(`${id}:${port.id}`)
       const v = edge ? outputs.get(edge.source)?.[edge.sourceHandle] : undefined
       inputs[port.id] = typeof v === port.type ? v : undefined
+      const level = edge ? levelsOut.get(edge.source)?.[edge.sourceHandle] : undefined
+      if (level !== undefined) levels[port.id] = level
+      const from = edge && nodeById.get(edge.source)
+      const toVolts = from && getDef(from.kind)?.volts
+      if (typeof v === 'number' && from && toVolts) volts[port.id] = toVolts(v, from.props)
     }
 
     const nodeState = (state.nodeState[id] ??= {})
-    const out = def.step({ id, props: node.props, inputs, state: nodeState, time: state.time, dt })
+    const out = def.step({ id, volts, props: node.props, inputs, state: nodeState, time: state.time, dt })
     outputs.set(id, out)
+    if (def.levels) levelsOut.set(id, def.levels({ id }))
 
     let history: number[] | undefined
     if (def.recordInput) {
@@ -112,7 +123,7 @@ export function stepEngine(graph: Graph, state: EngineState, dt: number): void {
       history = state.values[id]?.history ?? []
       if (typeof v === 'number') history = [...history, v].slice(-HISTORY_LEN)
     }
-    values[id] = { inputs, outputs: out, history }
+    values[id] = { inputs, outputs: out, history, ...(Object.keys(levels).length ? { levels } : {}) }
   }
 
   for (const id of Object.keys(state.nodeState)) if (!nodeById.has(id)) delete state.nodeState[id]

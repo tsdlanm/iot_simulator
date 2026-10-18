@@ -1,6 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { memo, type CSSProperties } from 'react'
 import BoardArt from '../components/boards/BoardArt'
+import PartArt from '../components/PartArt'
 import { getDef } from '../components/registry'
 import type { BoardPin, ComponentDef, PortDef } from '../components/types'
 import { useSim } from '../sim/runner'
@@ -62,14 +63,60 @@ function Body({ id, def, props }: { id: string; def: ComponentDef; props: Record
   const updateProp = useEditor((s) => s.updateProp)
   const input = values?.inputs.in
   const out = values?.outputs.out
-  const on = input === true
+  // A PWM pin reports how much of the time it is high; a plain signal is simply all or nothing.
+  const level = values?.inputs.in === undefined ? 0 : (values.levels?.in ?? (input === true ? 1 : 0))
+  const on = level >= 0.5
 
   switch (def.view) {
     case 'board':
       return null
-    case 'analog':
-      return <div className="readout">{fmt(out, def.unit)}</div>
+    case 'analog': {
+      const lo = Math.min(Number(props.min), Number(props.max))
+      const hi = Math.max(Number(props.min), Number(props.max))
+      const level = typeof out === 'number' && hi > lo ? (out - lo) / (hi - lo) : 0.5
+      const manual = props.pattern === 'manual'
+      return (
+        <div className="sensor">
+          <PartArt kind={def.kind} level={level} />
+          <div className="readout">{fmt(out ?? (manual ? Number(props.value) : undefined), def.unit)}</div>
+          {manual && (
+            <input
+              type="range"
+              className="slider nodrag nopan"
+              aria-label={`Nilai ${def.label}`}
+              min={lo}
+              max={hi}
+              step={(hi - lo) / 200 || 1}
+              value={Number(props.value)}
+              onChange={(e) => updateProp(id, 'value', Number(e.target.value))}
+            />
+          )}
+        </div>
+      )
+    }
     case 'digital': {
+      if (def.kind === 'pir-sensor') {
+        const manual = props.pattern === 'manual'
+        return (
+          <div className="sensor">
+            <PartArt kind={def.kind} active={out === true} />
+            {manual ? (
+              <button
+                type="button"
+                className={`toggle nodrag ${props.detected === true ? 'toggle-on' : ''}`}
+                aria-pressed={props.detected === true}
+                onClick={() => updateProp(id, 'detected', props.detected !== true)}
+              >
+                {props.detected === true ? 'Ada gerakan' : 'Tidak ada gerakan'}
+              </button>
+            ) : (
+              <div className="readout">
+                <span className={`pill ${out === true ? 'pill-on' : ''}`}>{out === true ? 'Gerak' : 'Diam'}</span>
+              </div>
+            )}
+          </div>
+        )
+      }
       const detail = def.kind === 'compare' ? `${String(props.op)} ${String(props.threshold)}` : ''
       return (
         <div className="readout">
@@ -80,27 +127,34 @@ function Body({ id, def, props }: { id: string; def: ComponentDef; props: Record
     }
     case 'button':
       return (
-        <button
-          type="button"
-          className={`toggle nodrag ${props.pressed === true ? 'toggle-on' : ''}`}
-          aria-pressed={props.pressed === true}
-          onClick={() => updateProp(id, 'pressed', props.pressed !== true)}
-        >
-          {props.pressed === true ? 'Ditekan' : 'Lepas'}
-        </button>
+        <div className="sensor">
+          <PartArt kind="button" active={props.pressed === true} />
+          <button
+            type="button"
+            className={`toggle nodrag ${props.pressed === true ? 'toggle-on' : ''}`}
+            aria-pressed={props.pressed === true}
+            onClick={() => updateProp(id, 'pressed', props.pressed !== true)}
+          >
+            {props.pressed === true ? 'Ditekan' : 'Lepas'}
+          </button>
+        </div>
       )
     case 'led':
-      return <div className={`led led-${String(props.color)} ${on ? 'led-on' : ''}`} aria-label={on ? 'LED menyala' : 'LED mati'} />
+      return (
+        <div className={`actuator ${level >= 0.5 ? 'led-on' : ''}`} role="img" aria-label={level >= 0.5 ? 'LED menyala' : 'LED mati'}>
+          <PartArt kind="led" color={String(props.color)} level={level} />
+        </div>
+      )
     case 'fan':
       return (
-        <div className={`fan ${on ? 'fan-on' : ''}`} role="img" aria-label={on ? 'Kipas berputar' : 'Kipas mati'}>
-          <ComponentIcon kind="fan" size={30} />
+        <div className={`actuator ${level >= 0.5 ? 'fan-on' : ''}`} role="img" aria-label={level > 0.02 ? 'Kipas berputar' : 'Kipas mati'}>
+          <PartArt kind="fan" level={level} />
         </div>
       )
     case 'buzzer':
       return (
-        <div className={`buzzer ${on ? 'buzzer-on' : ''}`} role="img" aria-label={on ? 'Buzzer berbunyi' : 'Buzzer diam'}>
-          <ComponentIcon kind="buzzer" size={28} />
+        <div className={`actuator ${on ? 'buzzer-on' : ''}`} role="img" aria-label={on ? 'Buzzer berbunyi' : 'Buzzer diam'}>
+          <PartArt kind="buzzer" active={on} />
         </div>
       )
     case 'gauge': {
