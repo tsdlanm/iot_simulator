@@ -3,7 +3,22 @@ import { loadConfig } from '../src/config.js'
 
 describe('loadConfig', () => {
   it('has sensible defaults', () => {
-    expect(loadConfig({})).toEqual({ NODE_ENV: 'development', PORT: 8080 })
+    expect(loadConfig({})).toMatchObject({
+      NODE_ENV: 'development',
+      PORT: 8080,
+      COMPILE_AVR_DIR: '/usr/share/arduino/hardware/arduino/avr',
+      COMPILE_TIMEOUT_MS: 20_000,
+      COMPILE_CONCURRENCY: 2,
+      COMPILE_RATE_LIMIT: 30,
+      TRUST_PROXY: false,
+    })
+  })
+
+  it('reads the compile settings and rejects nonsense for them', () => {
+    expect(loadConfig({ COMPILE_CONCURRENCY: '4', COMPILE_TIMEOUT_MS: '5000', TRUST_PROXY: 'true' })).toMatchObject({ COMPILE_CONCURRENCY: 4, COMPILE_TIMEOUT_MS: 5000, TRUST_PROXY: true })
+    expect(() => loadConfig({ COMPILE_CONCURRENCY: '0' })).toThrow(/COMPILE_CONCURRENCY/)
+    expect(() => loadConfig({ COMPILE_TIMEOUT_MS: '10' })).toThrow(/COMPILE_TIMEOUT_MS/)
+    expect(() => loadConfig({ TRUST_PROXY: 'yes' })).toThrow(/TRUST_PROXY/)
   })
 
   it('reads the port and database url', () => {
@@ -12,7 +27,8 @@ describe('loadConfig', () => {
   })
 
   it('treats an empty value as not set', () => {
-    expect(loadConfig({ DATABASE_URL: '', PORT: '' })).toEqual({ NODE_ENV: 'development', PORT: 8080 })
+    expect(loadConfig({ DATABASE_URL: '', PORT: '' })).toMatchObject({ NODE_ENV: 'development', PORT: 8080 })
+    expect(loadConfig({ DATABASE_URL: '' })).not.toHaveProperty('DATABASE_URL')
   })
 
   it('rejects a bad port and says which variable is wrong', () => {

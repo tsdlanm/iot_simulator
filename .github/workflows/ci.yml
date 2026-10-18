@@ -34,6 +34,8 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: server/package-lock.json
+      - name: Install the AVR toolchain (for the compile integration tests)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-avr avr-libc binutils-avr arduino-core-avr
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
