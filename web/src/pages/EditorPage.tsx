@@ -8,6 +8,7 @@ import PropertiesPanel from '../editor/PropertiesPanel'
 import { useEditor } from '../editor/store'
 import Toolbar from '../editor/Toolbar'
 import { useLayout } from '../ui/layout'
+import { startTheme } from '../ui/theme'
 import Resizer from '../ui/Resizer'
 import Toasts from '../ui/Toasts'
 
@@ -22,6 +23,7 @@ export default function EditorPage() {
   const rightWidth = useLayout((s) => s.rightWidth)
 
   useEffect(() => startAutosave(), [])
+  useEffect(() => startTheme(), [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

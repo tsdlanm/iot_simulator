@@ -16,6 +16,7 @@ import { getDef } from '../components/registry'
 import { useSim } from '../sim/runner'
 import Icon from '../ui/Icon'
 import { useLayout } from '../ui/layout'
+import { useTheme } from '../ui/theme'
 import { toast } from '../ui/toast'
 import NodeCard from './NodeCard'
 import { DRAG_MIME } from './Palette'
@@ -165,6 +166,7 @@ export default function Canvas() {
   const values = useSim((s) => s.values)
   const status = useSim((s) => s.status)
   const tool = useLayout((s) => s.tool)
+  const theme = useTheme((s) => s.theme)
   const { screenToFlowPosition } = useReactFlow()
   const host = useRef<HTMLDivElement>(null)
 
@@ -221,7 +223,7 @@ export default function Canvas() {
         onConnectEnd={onConnectEnd}
         isValidConnection={isValidConnection}
         onNodeDragStart={beginDrag}
-        colorMode="system"
+        colorMode={theme}
         fitView
         fitViewOptions={{ maxZoom: 1, minZoom: MIN_ZOOM, padding: 0.2 }}
         minZoom={MIN_ZOOM}

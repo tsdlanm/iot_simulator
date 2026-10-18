@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { SPEEDS, useSim } from '../sim/runner'
 import Icon from '../ui/Icon'
 import { useLayout } from '../ui/layout'
+import { useTheme } from '../ui/theme'
 import { toast } from '../ui/toast'
 import { EXAMPLES } from './example'
 import { parseProject, toProject, type Project } from './serialize'
@@ -19,6 +20,8 @@ export default function Toolbar() {
   const clear = useEditor((s) => s.clear)
   const { status, speed, time, start, pause, reset, setSpeed } = useSim()
   const { leftOpen, rightOpen, toggleLeft, toggleRight } = useLayout()
+  const theme = useTheme((s) => s.theme)
+  const toggleTheme = useTheme((s) => s.toggle)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const replaceProject = (p: Project) => {
@@ -149,6 +152,15 @@ export default function Toolbar() {
             e.target.value = ''
           }}
         />
+        <button
+          type="button"
+          className="btn btn-icon"
+          onClick={toggleTheme}
+          aria-label={theme === 'dark' ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'}
+          title={theme === 'dark' ? 'Mode terang' : 'Mode gelap'}
+        >
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
+        </button>
         <button
           type="button"
           className={`btn btn-icon ${rightOpen ? 'is-on' : ''}`}
