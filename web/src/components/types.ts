@@ -1,8 +1,9 @@
 export type Value = number | boolean
-export type PortType = 'number' | 'boolean'
+/** number and boolean carry signals; power carries a supply voltage, gnd a ground connection. */
+export type PortType = 'number' | 'boolean' | 'power' | 'gnd'
 export type PropValue = number | string | boolean
 export type Props = Record<string, PropValue>
-export type Category = 'mcu' | 'sensor' | 'logic' | 'actuator' | 'display'
+export type Category = 'mcu' | 'power' | 'sensor' | 'logic' | 'actuator' | 'display'
 
 export interface PortDef {
   id: string
@@ -63,6 +64,8 @@ export interface BoardLayout {
   pins: BoardPin[]
 }
 
+export type Needs = { min: number; max: number } | 'gnd'
+
 export interface ComponentDef {
   kind: string
   label: string
@@ -77,6 +80,10 @@ export interface ComponentDef {
   board?: BoardLayout
   /** When set, the engine records this input's numeric history for the node. */
   recordInput?: string
+  /** What a part needs to work: a supply voltage range on `vcc` plus ground, or just ground. */
+  needs?: Needs
+  /** Sources of power: the voltage each power output holds (ground outputs hold 0). */
+  supply?: Record<string, number>
   /** Sensors with an analog output: the voltage at the pin for a given reading. */
   volts?: (value: number, props: Props) => number
   /** Boards: how much of the time each output pin is high (0 to 1), so PWM can dim an LED or slow a fan. */

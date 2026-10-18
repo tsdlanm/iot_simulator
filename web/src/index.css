@@ -15,6 +15,7 @@
   --shadow: 0 1px 2px rgb(16 24 40 / 0.06);
   --shadow-lg: 0 6px 24px rgb(16 24 40 / 0.14);
   --cat-mcu: #0e7490;
+  --cat-power: #d4372c;
   --cat-sensor: #2f6fed;
   --cat-logic: #8e44ad;
   --cat-actuator: #d35400;
@@ -50,6 +51,7 @@
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-lg: 0 8px 28px rgb(0 0 0 / 0.45);
   --cat-mcu: #22d3ee;
+  --cat-power: #ff6b5e;
   --cat-sensor: #6ea1ff;
   --cat-logic: #c28be0;
   --cat-actuator: #ff9a5c;
@@ -247,6 +249,8 @@ select:hover, input[type='number']:hover { border-color: var(--border); }
 .wire { --wire: var(--muted); }
 .wire[data-signal='number'] { --wire: var(--num); }
 .wire[data-signal='boolean'] { --wire: var(--bool); }
+.wire[data-signal='power'] { --wire: #e5484d; }
+.wire[data-signal='gnd'] { --wire: #4a4f5c; }
 .react-flow__edge.wire-live .wire[data-auto='true'] { --wire: var(--live); }
 .wire path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
 .wire-casing { stroke: color-mix(in srgb, var(--wire) 40%, #000); stroke-width: 6.6; }
@@ -297,6 +301,7 @@ select:hover, input[type='number']:hover { border-color: var(--border); }
 .node-head { display: flex; align-items: center; gap: 7px; padding: 8px 10px 2px; font-weight: 600; white-space: nowrap; }
 .node-head span { overflow: hidden; text-overflow: ellipsis; }
 .node-icon { flex: none; color: var(--cat-sensor); }
+.cat-power .node-icon { color: var(--cat-power); }
 .cat-logic .node-icon { color: var(--cat-logic); }
 .cat-actuator .node-icon { color: var(--cat-actuator); }
 .cat-display .node-icon { color: var(--cat-display); }
@@ -311,12 +316,14 @@ select:hover, input[type='number']:hover { border-color: var(--border); }
 .port-label-in { left: 12px; }
 .port-label-out { right: 12px; }
 
-.actuator { display: grid; justify-items: center; }
 .fan-rotor.spinning { animation: spin var(--spin, 0.6s) linear infinite; }
-.buzzer-on .part-art { animation: shake 0.15s linear infinite; }
-.sensor { display: grid; gap: 4px; justify-items: center; }
-.sensor .readout { justify-content: center; }
-.part-art { width: 100%; max-width: 132px; height: 64px; }
+.part-node { position: relative; color: var(--muted); }
+.part-node.node-selected { outline-offset: 6px; border-radius: 12px; }
+.part-info { display: grid; justify-items: center; gap: 4px; margin-top: 14px; }
+.part-warn { color: var(--danger); font-size: 11.5px; font-weight: 600; }
+.part-name { color: var(--text); font-size: 12px; font-weight: 600; }
+.part-info .readout { font-size: 17px; color: var(--text); }
+.buzzer-on svg .waves { animation: shake 0.18s linear infinite; transform-origin: 60px 62px; }
 .slider { width: 100%; margin: 2px 0 0; accent-color: var(--accent); cursor: pointer; }
 .readout { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .detail { font-size: 12px; font-weight: 400; color: var(--muted); }
@@ -338,6 +345,8 @@ select:hover, input[type='number']:hover { border-color: var(--border); }
 .board-node.node-selected { outline-offset: 5px; }
 .pin { width: 11px; height: 11px; border: 2px solid #fff; background: var(--num); border-radius: 50%; z-index: 5; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.45); }
 .pin.port-boolean { background: var(--bool); }
+.pin.port-power { background: #e5484d; }
+.pin.port-gnd { background: #2b2e36; border-color: #cfd3dc; }
 .pin.pin-out { border-radius: 3px; }
 .pin::after { content: ''; position: absolute; inset: -4px; }
 .pin:hover, .pin.connectingto, .pin.valid { box-shadow: 0 0 0 3px var(--accent); }

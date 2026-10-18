@@ -29,11 +29,12 @@ describe('parseProject', () => {
 
   it('falls back to defaults for props with the wrong type', () => {
     const p = logicExample()
-    ;(p.nodes[1].props as Record<string, unknown>).threshold = 'hot'
-    ;(p.nodes[1].props as Record<string, unknown>).evil = '<script>'
+    const i = p.nodes.findIndex((n) => n.kind === 'compare')
+    ;(p.nodes[i].props as Record<string, unknown>).threshold = 'hot'
+    ;(p.nodes[i].props as Record<string, unknown>).evil = '<script>'
     const parsed = parseProject(p)!
-    expect(parsed.nodes[1].props.threshold).toBe(30)
-    expect(parsed.nodes[1].props).not.toHaveProperty('evil')
+    expect(parsed.nodes[i].props.threshold).toBe(30)
+    expect(parsed.nodes[i].props).not.toHaveProperty('evil')
   })
 
   it('drops oversized string props instead of loading them', () => {

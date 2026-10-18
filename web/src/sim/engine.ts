@@ -36,6 +36,12 @@ export interface EngineState {
 
 export const HISTORY_LEN = 120
 
+/** Power and ground wires only say what is connected to what; they never carry data from one step to the next. */
+export const isSupplyType = (t: string | undefined) => t === 'power' || t === 'gnd'
+
+/** The kind of value a port carries: supply voltages are numbers too. */
+export const valueType = (t: string) => (t === 'boolean' ? 'boolean' : 'number')
+
 export const createEngineState = (): EngineState => ({ time: 0, nodeState: {}, values: {} })
 
 /** Kahn's algorithm. Nodes that sit on a cycle are left out of the result. */
@@ -89,11 +95,14 @@ export function stepEngine(graph: Graph, state: EngineState, dt: number): void {
 
   const nodeById = new Map(graph.nodes.map((n) => [n.id, n]))
   const edgeByTarget = new Map(graph.edges.map((e) => [`${e.target}:${e.targetHandle}`, e]))
+  // Supply wires come from a fixed value, so they do not order the steps (a sensor is powered by the board it feeds).
+  const outType = (e: GraphEdge) => getDef(nodeById.get(e.source)?.kind ?? '')?.outputs.find((p) => p.id === e.sourceHandle)?.type
+  const dataEdges = graph.edges.filter((e) => !isSupplyType(outType(e)))
   const outputs = new Map<string, Record<string, Value>>()
   const levelsOut = new Map<string, Record<string, number>>()
   const values: Record<string, NodeValues> = {}
 
-  for (const id of topoOrder(graph.nodes, graph.edges)) {
+  for (const id of topoOrder(graph.nodes, dataEdges)) {
     const node = nodeById.get(id)
     const def = node && getDef(node.kind)
     if (!node || !def) continue
@@ -103,8 +112,9 @@ export function stepEngine(graph: Graph, state: EngineState, dt: number): void {
     const levels: Record<string, number> = {}
     for (const port of def.inputs) {
       const edge = edgeByTarget.get(`${id}:${port.id}`)
-      const v = edge ? outputs.get(edge.source)?.[edge.sourceHandle] : undefined
-      inputs[port.id] = typeof v === port.type ? v : undefined
+      const supplied = edge && isSupplyType(port.type) ? getDef(nodeById.get(edge.source)?.kind ?? '')?.supply?.[edge.sourceHandle] : undefined
+      const v = supplied ?? (edge ? outputs.get(edge.source)?.[edge.sourceHandle] : undefined)
+      inputs[port.id] = typeof v === valueType(port.type) ? v : undefined
       const level = edge ? levelsOut.get(edge.source)?.[edge.sourceHandle] : undefined
       if (level !== undefined) levels[port.id] = level
       const from = edge && nodeById.get(edge.source)

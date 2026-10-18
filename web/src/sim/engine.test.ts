@@ -16,16 +16,31 @@ const edge = (source: string, sourceHandle: string, target: string, targetHandle
   targetHandle,
 })
 
+/** Wires a 5 V supply to every part that needs one, so tests can focus on what they are about. */
+const powered = (g: Graph): Graph => {
+  const needy = g.nodes.filter((n) => getDef(n.kind)?.needs)
+  return {
+    nodes: [...g.nodes, node('psu', 'power-5v')],
+    edges: [
+      ...g.edges,
+      ...needy.flatMap((n) => [
+        { ...edge('psu', 'gnd', n.id, 'gnd'), id: `g-${n.id}` },
+        ...(getDef(n.kind)!.needs === 'gnd' ? [] : [{ ...edge('psu', 'vcc', n.id, 'vcc'), id: `v-${n.id}` }]),
+      ]),
+    ],
+  }
+}
+
 describe('engine', () => {
   it('propagates a sensor through a comparator to an actuator', () => {
-    const graph: Graph = {
+    const graph = powered({
       nodes: [
         node('t', 'temp-sensor', { pattern: 'constant', min: 40, max: 40 }),
         node('c', 'compare', { op: '>', threshold: 30 }),
         node('f', 'fan'),
       ],
       edges: [edge('t', 'out', 'c', 'a'), edge('c', 'out', 'f', 'in')],
-    }
+    })
     const state = createEngineState()
     stepEngine(graph, state, 100)
     expect(state.values.t.outputs.out).toBe(40)
@@ -68,10 +83,10 @@ describe('engine', () => {
   })
 
   it('records chart history and caps its length', () => {
-    const graph: Graph = {
+    const graph = powered({
       nodes: [node('t', 'temp-sensor', { pattern: 'constant', min: 5, max: 5 }), node('c', 'chart')],
       edges: [edge('t', 'out', 'c', 'in')],
-    }
+    })
     const state = createEngineState()
     for (let i = 0; i < 300; i++) stepEngine(graph, state, 100)
     expect(state.values.c.history).toHaveLength(120)
@@ -89,7 +104,7 @@ describe('engine', () => {
   })
 
   it('varies a sine sensor over time within its range', () => {
-    const graph: Graph = { nodes: [node('t', 'temp-sensor', { pattern: 'sine', min: 20, max: 40, period: 10 })], edges: [] }
+    const graph = powered({ nodes: [node('t', 'temp-sensor', { pattern: 'sine', min: 20, max: 40, period: 10 })], edges: [] })
     const state = createEngineState()
     const seen: number[] = []
     for (let i = 0; i < 100; i++) {
@@ -124,14 +139,14 @@ describe('graph helpers', () => {
 
 describe('microcontroller boards', () => {
   it('runs the Uno program: analog in, digital out', () => {
-    const graph: Graph = {
+    const graph = powered({
       nodes: [
         node('t', 'temp-sensor', { pattern: 'constant', min: 40, max: 40 }),
         node('u', 'mcu-uno', { mode: 'simple' }),
         node('f', 'fan'),
       ],
       edges: [edge('t', 'out', 'u', 'A0'), edge('u', 'D13', 'f', 'in')],
-    }
+    })
     const state = createEngineState()
     stepEngine(graph, state, 100)
     expect(state.values.u.inputs.A0).toBe(40)
@@ -193,7 +208,7 @@ describe('microcontroller boards', () => {
 describe('sensors and actuators', () => {
   it('gives analog sensors an electrical output for the emulator', () => {
     const volts = (kind: string, props: Record<string, number | string | boolean>) => {
-      const graph: Graph = { nodes: [node('s', kind, { pattern: 'manual', ...props }), node('u', 'mcu-uno')], edges: [edge('s', 'out', 'u', 'A0')] }
+      const graph = powered({ nodes: [node('s', kind, { pattern: 'manual', ...props }), node('u', 'mcu-uno')], edges: [edge('s', 'out', 'u', 'A0')] })
       const spy = vi.spyOn(getDef('mcu-uno')!, 'step')
       stepEngine(graph, createEngineState(), 100)
       const got = spy.mock.calls[0]![0].volts.A0
@@ -209,7 +224,7 @@ describe('sensors and actuators', () => {
   it('manual sensors hold the value you set, within their range', () => {
     const run = (value: number) => {
       const s = createEngineState()
-      stepEngine({ nodes: [node('t', 'temp-sensor', { pattern: 'manual', value, min: 0, max: 50 })], edges: [] }, s, 100)
+      stepEngine(powered({ nodes: [node('t', 'temp-sensor', { pattern: 'manual', value, min: 0, max: 50 })], edges: [] }), s, 100)
       return s.values.t.outputs.out
     }
     expect(run(23)).toBe(23)
@@ -219,7 +234,7 @@ describe('sensors and actuators', () => {
   it('a manual PIR follows its switch', () => {
     const run = (detected: boolean) => {
       const s = createEngineState()
-      stepEngine({ nodes: [node('p', 'pir-sensor', { pattern: 'manual', detected })], edges: [] }, s, 100)
+      stepEngine(powered({ nodes: [node('p', 'pir-sensor', { pattern: 'manual', detected })], edges: [] }), s, 100)
       return s.values.p.outputs.out
     }
     expect(run(true)).toBe(true)
@@ -235,5 +250,46 @@ describe('sensors and actuators', () => {
     stepEngine(graph, s, 100)
     def.levels = orig
     expect(s.values.l.levels).toEqual({ in: 0.25 })
+  })
+})
+
+describe('power', () => {
+  const sensor = (extra: Graph['edges'], board?: string) => {
+    const nodes = [node('t', 'temp-sensor', { pattern: 'manual', value: 30, min: 0, max: 100 }), node('psu', 'power-5v'), ...(board ? [node('b', board)] : [])]
+    const s = createEngineState()
+    stepEngine({ nodes, edges: extra }, s, 100)
+    return s.values.t
+  }
+
+  it('a sensor with nothing wired to it gives no reading', () => {
+    expect(sensor([]).outputs.out).toBeUndefined()
+  })
+
+  it('needs ground as well as a supply', () => {
+    expect(sensor([edge('psu', 'vcc', 't', 'vcc')]).outputs.out).toBeUndefined()
+    expect(sensor([edge('psu', 'gnd', 't', 'gnd')]).outputs.out).toBeUndefined()
+    expect(sensor([edge('psu', 'vcc', 't', 'vcc'), edge('psu', 'gnd', 't', 'gnd')]).outputs.out).toBe(30)
+  })
+
+  it('does not work below its minimum voltage, such as an LM35 on 3.3 V', () => {
+    const v = sensor([edge('b', '3V3', 't', 'vcc'), edge('b', 'GND_L', 't', 'gnd')], 'mcu-esp32')
+    expect(v.outputs.out).toBeUndefined()
+    expect(sensor([edge('b', 'VIN', 't', 'vcc'), edge('b', 'GND_L', 't', 'gnd')], 'mcu-esp32').outputs.out).toBe(30)
+  })
+
+  it('takes power from a board without making the wiring a loop', () => {
+    const graph: Graph = {
+      nodes: [node('t', 'temp-sensor', { pattern: 'manual', value: 30, min: 0, max: 100 }), node('u', 'mcu-uno', { mode: 'simple' })],
+      edges: [edge('u', '5V', 't', 'vcc'), edge('u', 'GND_1', 't', 'gnd'), edge('t', 'out', 'u', 'A0')],
+    }
+    const s = createEngineState()
+    stepEngine(graph, s, 100)
+    expect(s.values.t.outputs.out).toBe(30)
+    expect(s.values.u.inputs.A0).toBe(30)
+  })
+
+  it('does not accept a signal wire on a power pin', () => {
+    expect(getDef('temp-sensor')!.inputs.find((i) => i.id === 'vcc')!.type).toBe('power')
+    expect(getDef('mcu-uno')!.outputs.find((o) => o.id === '5V')!.type).toBe('power')
   })
 })

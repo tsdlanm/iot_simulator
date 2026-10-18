@@ -1,7 +1,7 @@
 import { CPP_KIND, exchange, levels } from '../emu/bridge'
 import { compileCached, execute, MAX_PROGRAM_LENGTH, type PinSpec } from '../sim/firmware'
 import { ESP32, PICO, UNO } from './boards'
-import type { BoardLayout, Category, ComponentDef, Props, PropDef, StepContext, Value } from './types'
+import type { BoardLayout, Category, ComponentDef, Needs, PortDef, Props, PropDef, StepContext, Value } from './types'
 
 const num = (props: Props, key: string, fallback = 0): number => {
   const v = props[key]
@@ -64,6 +64,7 @@ function analogSensorDef(
   max: number,
   period: number,
   volts: (value: number) => number,
+  needs: Needs,
 ): ComponentDef {
   return {
     kind,
@@ -72,11 +73,12 @@ function analogSensorDef(
     unit,
     description,
     view: 'analog',
-    inputs: [],
+    inputs: [vccIn, gndIn],
     outputs: [{ id: 'out', label: 'nilai', type: 'number' }],
+    needs,
     props: analogProps(min, max, period),
     volts: (value) => clamp(volts(value), 0, 5),
-    step: analogSensor,
+    step: (ctx) => (supplyState(needs, ctx.inputs) === 'ok' ? analogSensor(ctx) : {}),
   }
 }
 
@@ -171,7 +173,11 @@ function boardDef(kind: string, label: string, description: string, board: Board
     inputs: board.pins
       .filter((p) => p.role === 'in-num' || p.role === 'in-bool')
       .map((p) => ({ id: p.id, label: p.label, type: p.role === 'in-num' ? ('number' as const) : ('boolean' as const) })),
-    outputs: board.pins.filter((p) => p.role === 'out').map((p) => ({ id: p.id, label: p.label, type: 'boolean' as const })),
+    outputs: [
+      ...board.pins.filter((p) => p.role === 'out').map((p) => ({ id: p.id, label: p.label, type: 'boolean' as const })),
+      ...board.pins.filter((p) => p.role === 'power' || p.role === 'gnd').map((p) => ({ id: p.id, label: p.label, type: p.role === 'power' ? ('power' as const) : ('gnd' as const) })),
+    ],
+    supply: Object.fromEntries(board.pins.filter((p) => p.role === 'power' || p.role === 'gnd').map((p) => [p.id, p.role === 'gnd' ? 0 : (POWER_VOLTS[p.id] ?? 5)])),
     props: [{ key: 'program', label: 'Program', type: 'code', default: program, hidden: true, rows: 10, maxLength: MAX_PROGRAM_LENGTH }, ...extra],
     ...(kind === CPP_KIND ? { levels: ({ id }: { id: string }) => levels(id) } : {}),
     step: (ctx) => {
@@ -184,7 +190,31 @@ function boardDef(kind: string, label: string, description: string, board: Board
 
 export const MCU_PROGRAM_LIMIT = MAX_PROGRAM_LENGTH
 
+/** What each power pin holds with the board running from USB. */
+const POWER_VOLTS: Record<string, number> = { '5V': 5, '3V3': 3.3, VIN: 5, VBUS: 5, VSYS: 5 }
+
 const bool = (id: string, label: string) => ({ id, label, type: 'boolean' as const })
+const vccIn: PortDef = { id: 'vcc', label: 'VCC', type: 'power' }
+const gndIn: PortDef = { id: 'gnd', label: 'GND', type: 'gnd' }
+
+export type SupplyState = 'ok' | 'none' | 'low' | 'high'
+
+/** Whether a part is wired to a supply it can live on. Ground alone is not enough when it needs a voltage. */
+export function supplyState(needs: Needs | undefined, inputs: Record<string, Value | undefined>): SupplyState {
+  if (!needs) return 'ok'
+  if (inputs.gnd === undefined) return 'none'
+  if (needs === 'gnd') return 'ok'
+  const v = inputs.vcc
+  if (typeof v !== 'number') return 'none'
+  return v < needs.min ? 'low' : v > needs.max ? 'high' : 'ok'
+}
+
+export const SUPPLY_TEXT: Record<SupplyState, string> = {
+  ok: '',
+  none: 'Belum ada daya',
+  low: 'Tegangan terlalu rendah',
+  high: 'Tegangan terlalu tinggi',
+}
 
 export const COMPONENTS: ComponentDef[] = [
   // Microcontroller boards
@@ -192,18 +222,36 @@ export const COMPONENTS: ComponentDef[] = [
   boardDef('mcu-esp32', 'ESP32 DevKit', 'ESP32 DevKit V1 30 pin. Enam masukan analog dan 13 pin keluaran.', ESP32, ESP32_PROGRAM),
   boardDef('mcu-pico', 'Raspberry Pi Pico', 'Raspberry Pi Pico (RP2040) dengan 40 pin. Tiga masukan analog GP26 sampai GP28.', PICO, PICO_PROGRAM),
 
+  // Power
+  {
+    kind: 'power-5v',
+    label: 'Catu daya 5 V',
+    category: 'power',
+    description: 'Sumber 5 V dan ground, untuk rangkaian tanpa papan.',
+    view: 'digital',
+    inputs: [],
+    outputs: [
+      { id: 'vcc', label: '5V', type: 'power' },
+      { id: 'gnd', label: 'GND', type: 'gnd' },
+    ],
+    supply: { vcc: 5, gnd: 0 },
+    props: [],
+    step: () => ({}),
+  },
+
   // Sensors
-  analogSensorDef('temp-sensor', 'Sensor suhu', '°C', 'Seperti LM35: 10 mV per °C, jadi analogRead(A0) * 500.0 / 1023.0 memberi suhu.', 20, 40, 30, (c) => c * 0.01),
-  analogSensorDef('humidity-sensor', 'Sensor kelembapan', '%', 'Keluaran analog 0 sampai 5 V untuk 0 sampai 100 %: analogRead(A0) * 100.0 / 1023.0.', 30, 90, 40, (h) => (h / 100) * 5),
-  analogSensorDef('light-sensor', 'Sensor cahaya', 'lux', 'Modul LDR: 0 sampai 1000 lux menjadi 0 sampai 5 V, jadi analogRead(A0) * 1000.0 / 1023.0.', 0, 1000, 25, (lux) => (lux / 1000) * 5),
+  analogSensorDef('temp-sensor', 'Sensor suhu', '°C', 'Seperti LM35: 10 mV per °C, jadi analogRead(A0) * 500.0 / 1023.0 memberi suhu.', 20, 40, 30, (c) => c * 0.01, { min: 4, max: 20 }),
+  analogSensorDef('humidity-sensor', 'Sensor kelembapan', '%', 'Keluaran analog 0 sampai 5 V untuk 0 sampai 100 %: analogRead(A0) * 100.0 / 1023.0.', 30, 90, 40, (h) => (h / 100) * 5, { min: 3, max: 5.5 }),
+  analogSensorDef('light-sensor', 'Sensor cahaya', 'lux', 'Modul LDR: 0 sampai 1000 lux menjadi 0 sampai 5 V, jadi analogRead(A0) * 1000.0 / 1023.0.', 0, 1000, 25, (lux) => (lux / 1000) * 5, { min: 3, max: 5.5 }),
   {
     kind: 'pir-sensor',
     label: 'Sensor gerak (PIR)',
     category: 'sensor',
     description: 'Aktif sebentar secara acak, seperti mendeteksi gerakan.',
     view: 'digital',
-    inputs: [],
+    inputs: [vccIn, gndIn],
     outputs: [bool('out', 'gerak')],
+    needs: { min: 4.5, max: 12 },
     props: [
       {
         key: 'pattern',
@@ -220,6 +268,7 @@ export const COMPONENTS: ComponentDef[] = [
       { key: 'hold', label: 'Lama aktif (detik)', type: 'number', default: 3, min: 0.5, step: 0.5 },
     ],
     step: (ctx) => {
+      if (supplyState({ min: 4.5, max: 12 }, ctx.inputs) !== 'ok') return { out: false }
       if (ctx.props.pattern === 'manual') return { out: ctx.props.detected === true }
       const until = typeof ctx.state.until === 'number' ? ctx.state.until : 0
       let active = ctx.time < until
@@ -339,7 +388,8 @@ export const COMPONENTS: ComponentDef[] = [
     category: 'actuator',
     description: 'Menyala kalau masukan benar.',
     view: 'led',
-    inputs: [bool('in', 'masuk')],
+    inputs: [bool('in', 'anoda'), gndIn],
+    needs: 'gnd',
     outputs: [],
     props: [
       {
@@ -359,11 +409,12 @@ export const COMPONENTS: ComponentDef[] = [
   },
   {
     kind: 'fan',
-    label: 'Kipas (relay)',
+    label: 'Kipas (modul relay)',
     category: 'actuator',
-    description: 'Berputar kalau masukan benar.',
+    description: 'Kipas 5 V lewat modul relay: perlu VCC dan GND, berputar saat IN aktif.',
     view: 'fan',
-    inputs: [bool('in', 'masuk')],
+    inputs: [vccIn, gndIn, bool('in', 'IN')],
+    needs: { min: 4, max: 6 },
     outputs: [],
     props: [],
     step: () => ({}),
@@ -374,7 +425,8 @@ export const COMPONENTS: ComponentDef[] = [
     category: 'actuator',
     description: 'Berbunyi (ditandai animasi) kalau masukan benar.',
     view: 'buzzer',
-    inputs: [bool('in', 'masuk')],
+    inputs: [bool('in', '+'), gndIn],
+    needs: 'gnd',
     outputs: [],
     props: [],
     step: () => ({}),
@@ -421,6 +473,7 @@ export const getDef = (kind: string): ComponentDef | undefined => byKind.get(kin
 
 export const CATEGORIES: { id: Category; label: string }[] = [
   { id: 'mcu', label: 'Mikrokontroler' },
+  { id: 'power', label: 'Daya' },
   { id: 'sensor', label: 'Sensor' },
   { id: 'logic', label: 'Logika' },
   { id: 'actuator', label: 'Aktuator' },

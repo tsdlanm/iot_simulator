@@ -277,7 +277,7 @@ export const useEditor = create<EditorState>((set, get) => {
   }
 })
 
-const typeName = (t: 'number' | 'boolean') => (t === 'number' ? 'angka' : 'ya/tidak')
+const typeName = (t: string) => ({ number: 'angka', boolean: 'ya/tidak', power: 'daya', gnd: 'ground' })[t] ?? t
 
 /** Why a wire cannot be made, in plain language, or null if it is allowed. */
 export function connectionProblem(c: Connection | Edge): string | null {
@@ -296,6 +296,11 @@ export function connectionProblem(c: Connection | Edge): string | null {
   if (edges.some((e) => e.target === c.target && e.targetHandle === c.targetHandle)) {
     return `${inp.label} sudah punya kabel. Hapus kabel lama dulu`
   }
-  if (wouldCreateCycle(edges, c.source, c.target)) return 'Kabel ini membuat putaran (loop), dan loop belum didukung'
+  // Power and ground wires are not data flow, so they can never make a loop.
+  const isData = (e: { source: string; sourceHandle?: string | null }) => {
+    const t = getDef(nodes.find((n) => n.id === e.source)?.data.kind ?? '')?.outputs.find((p) => p.id === e.sourceHandle)?.type
+    return t === 'number' || t === 'boolean'
+  }
+  if (isData(c) && wouldCreateCycle(edges.filter(isData), c.source, c.target)) return 'Kabel ini membuat putaran (loop), dan loop belum didukung'
   return null
 }

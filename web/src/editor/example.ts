@@ -46,12 +46,12 @@ const uno = (): Project => ({
   version: PROJECT_VERSION,
   name: 'Kipas otomatis (Arduino Uno)',
   nodes: [
-    { id: 'uno', kind: 'mcu-uno', x: 330, y: 150, props: { mode: 'cpp', sketch: UNO_SKETCH, program: UNO_PROGRAM } },
-    { id: 'temp', kind: 'temp-sensor', x: 40, y: 520, props: { pattern: 'sine', min: 20, max: 40, period: 30 } },
-    { id: 'fan', kind: 'fan', x: 540, y: 0, props: {} },
-    { id: 'led', kind: 'led', x: 780, y: 0, props: { color: 'green' } },
-    { id: 'gauge', kind: 'gauge', x: 640, y: 520, props: { min: 0, max: 50, unit: '°C' } },
-    { id: 'chart', kind: 'chart', x: 860, y: 520, props: {} },
+    { id: 'uno', kind: 'mcu-uno', x: 330, y: 170, props: { mode: 'cpp', sketch: UNO_SKETCH, program: UNO_PROGRAM } },
+    { id: 'temp', kind: 'temp-sensor', x: 40, y: 420, props: { pattern: 'sine', min: 20, max: 40, period: 30 } },
+    { id: 'fan', kind: 'fan', x: 800, y: 40, props: {} },
+    { id: 'led', kind: 'led', x: 1000, y: 60, props: { color: 'green' } },
+    { id: 'gauge', kind: 'gauge', x: 560, y: 620, props: { min: 0, max: 50, unit: '°C' } },
+    { id: 'chart', kind: 'chart', x: 800, y: 620, props: {} },
   ] as N[],
   edges: [
     edge('e1', 'temp', 'out', 'uno', 'A0'),
@@ -59,6 +59,12 @@ const uno = (): Project => ({
     edge('e3', 'uno', 'D12', 'led', 'in'),
     edge('e4', 'temp', 'out', 'gauge', 'in'),
     edge('e5', 'temp', 'out', 'chart', 'in'),
+    // Supply: every part needs its own VCC/GND wire, like on a breadboard.
+    edge('p1', 'uno', '5V', 'temp', 'vcc'),
+    edge('p2', 'uno', 'GND_1', 'temp', 'gnd'),
+    edge('p3', 'uno', '5V', 'fan', 'vcc'),
+    edge('p4', 'uno', 'GND_1', 'fan', 'gnd'),
+    edge('p5', 'uno', 'GND_2', 'led', 'gnd'),
   ],
 })
 
@@ -66,13 +72,13 @@ const esp32 = (): Project => ({
   version: PROJECT_VERSION,
   name: 'Lampu dan alarm (ESP32)',
   nodes: [
-    { id: 'esp', kind: 'mcu-esp32', x: 380, y: 130, props: { program: ESP32_PROGRAM } },
-    { id: 'light', kind: 'light-sensor', x: 60, y: 130, props: { pattern: 'sine', min: 0, max: 1000, period: 24 } },
-    { id: 'btn', kind: 'button', x: 60, y: 290, props: { pressed: false } },
-    { id: 'pir', kind: 'pir-sensor', x: 60, y: 430, props: { chance: 40, hold: 4 } },
-    { id: 'lamp', kind: 'led', x: 720, y: 300, props: { color: 'amber' } },
-    { id: 'buzz', kind: 'buzzer', x: 720, y: 140, props: {} },
-    { id: 'gauge', kind: 'gauge', x: 720, y: 450, props: { min: 0, max: 1000, unit: 'lux' } },
+    { id: 'esp', kind: 'mcu-esp32', x: 420, y: 110, props: { program: ESP32_PROGRAM } },
+    { id: 'light', kind: 'light-sensor', x: 40, y: 40, props: { pattern: 'sine', min: 0, max: 1000, period: 24 } },
+    { id: 'btn', kind: 'button', x: 40, y: 330, props: { pressed: false } },
+    { id: 'pir', kind: 'pir-sensor', x: 230, y: 300, props: { chance: 40, hold: 4 } },
+    { id: 'lamp', kind: 'led', x: 740, y: 300, props: { color: 'amber' } },
+    { id: 'buzz', kind: 'buzzer', x: 740, y: 40, props: {} },
+    { id: 'gauge', kind: 'gauge', x: 980, y: 300, props: { min: 0, max: 1000, unit: 'lux' } },
   ] as N[],
   edges: [
     edge('e1', 'light', 'out', 'esp', 'D34'),
@@ -81,6 +87,12 @@ const esp32 = (): Project => ({
     edge('e4', 'esp', 'D4', 'lamp', 'in'),
     edge('e5', 'esp', 'D5', 'buzz', 'in'),
     edge('e6', 'light', 'out', 'gauge', 'in'),
+    edge('p1', 'esp', '3V3', 'light', 'vcc'),
+    edge('p2', 'esp', 'GND_R', 'light', 'gnd'),
+    edge('p3', 'esp', 'VIN', 'pir', 'vcc'),
+    edge('p4', 'esp', 'GND_L', 'pir', 'gnd'),
+    edge('p5', 'esp', 'GND_R', 'lamp', 'gnd'),
+    edge('p6', 'esp', 'GND_R', 'buzz', 'gnd'),
   ],
 })
 
@@ -88,15 +100,17 @@ const pico = (): Project => ({
   version: PROJECT_VERSION,
   name: 'Lampu berkedip (Raspberry Pi Pico)',
   nodes: [
-    { id: 'pico', kind: 'mcu-pico', x: 380, y: 100, props: { program: PICO_PROGRAM } },
-    { id: 'btn', kind: 'button', x: 80, y: 120, props: { pressed: false } },
-    { id: 'blink', kind: 'led', x: 640, y: 240, props: { color: 'red' } },
-    { id: 'follow', kind: 'led', x: 640, y: 340, props: { color: 'blue' } },
+    { id: 'pico', kind: 'mcu-pico', x: 420, y: 90, props: { program: PICO_PROGRAM } },
+    { id: 'btn', kind: 'button', x: 100, y: 160, props: { pressed: false } },
+    { id: 'blink', kind: 'led', x: 700, y: 160, props: { color: 'red' } },
+    { id: 'follow', kind: 'led', x: 880, y: 160, props: { color: 'blue' } },
   ] as N[],
   edges: [
     edge('e1', 'btn', 'out', 'pico', 'GP0'),
     edge('e2', 'pico', 'GP22', 'blink', 'in'),
     edge('e3', 'pico', 'GP21', 'follow', 'in'),
+    edge('p1', 'pico', 'GND_4', 'blink', 'gnd'),
+    edge('p2', 'pico', 'GND_4', 'follow', 'gnd'),
   ],
 })
 
@@ -105,12 +119,13 @@ const logic = (): Project => ({
   version: PROJECT_VERSION,
   name: 'Kipas otomatis (tanpa papan)',
   nodes: [
-    { id: 'temp', kind: 'temp-sensor', x: 40, y: 120, props: { pattern: 'sine', min: 20, max: 40, period: 30 } },
+    { id: 'psu', kind: 'power-5v', x: 40, y: 460, props: {} },
+    { id: 'temp', kind: 'temp-sensor', x: 40, y: 60, props: { pattern: 'sine', min: 20, max: 40, period: 30 } },
     { id: 'cmp', kind: 'compare', x: 340, y: 120, props: { op: '>', threshold: 30 } },
     { id: 'fan', kind: 'fan', x: 640, y: 40, props: {} },
-    { id: 'led', kind: 'led', x: 640, y: 230, props: { color: 'red' } },
-    { id: 'gauge', kind: 'gauge', x: 340, y: 330, props: { min: 0, max: 50, unit: '°C' } },
-    { id: 'chart', kind: 'chart', x: 640, y: 400, props: {} },
+    { id: 'led', kind: 'led', x: 860, y: 60, props: { color: 'red' } },
+    { id: 'gauge', kind: 'gauge', x: 340, y: 380, props: { min: 0, max: 50, unit: '°C' } },
+    { id: 'chart', kind: 'chart', x: 620, y: 420, props: {} },
   ] as N[],
   edges: [
     edge('e1', 'temp', 'out', 'cmp', 'a'),
