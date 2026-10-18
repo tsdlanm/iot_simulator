@@ -127,7 +127,7 @@ describe('microcontroller boards', () => {
     const graph: Graph = {
       nodes: [
         node('t', 'temp-sensor', { pattern: 'constant', min: 40, max: 40 }),
-        node('u', 'mcu-uno'),
+        node('u', 'mcu-uno', { mode: 'simple' }),
         node('f', 'fan'),
       ],
       edges: [edge('t', 'out', 'u', 'A0'), edge('u', 'D13', 'f', 'in')],
@@ -145,7 +145,7 @@ describe('microcontroller boards', () => {
   })
 
   it('blinks D12 from simulated time', () => {
-    const graph: Graph = { nodes: [node('u', 'mcu-uno')], edges: [] }
+    const graph: Graph = { nodes: [node('u', 'mcu-uno', { mode: 'simple' })], edges: [] }
     const state = createEngineState()
     const seen = new Set<boolean>()
     for (let i = 0; i < 40; i++) {
@@ -183,7 +183,7 @@ describe('microcontroller boards', () => {
 
   it('refuses wires from a number output into a boolean pin', () => {
     // D13 is boolean, so the Uno cannot feed an analog-only input such as a gauge.
-    const graph: Graph = { nodes: [node('u', 'mcu-uno'), node('g', 'gauge')], edges: [edge('u', 'D13', 'g', 'in')] }
+    const graph: Graph = { nodes: [node('u', 'mcu-uno', { mode: 'simple' }), node('g', 'gauge')], edges: [edge('u', 'D13', 'g', 'in')] }
     const state = createEngineState()
     stepEngine(graph, state, 100)
     expect(state.values.g.inputs.in).toBeUndefined()

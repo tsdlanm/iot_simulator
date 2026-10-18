@@ -1,7 +1,8 @@
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, type Completion, type CompletionContext } from '@codemirror/autocomplete'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
+import { cpp } from '@codemirror/lang-cpp'
 import { bracketMatching, HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language'
-import { linter, lintGutter, lintKeymap, type Diagnostic } from '@codemirror/lint'
+import { linter, lintGutter, lintKeymap, setDiagnostics, type Diagnostic } from '@codemirror/lint'
 import { Annotation, EditorState } from '@codemirror/state'
 import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, placeholder } from '@codemirror/view'
 import { tags as t } from '@lezer/highlight'
@@ -55,7 +56,64 @@ const highlight = HighlightStyle.define([
   { tag: t.definition(t.variableName), color: 'var(--code-out)', fontWeight: '600' },
   { tag: t.special(t.variableName), color: 'var(--code-time)' },
   { tag: t.invalid, color: 'var(--danger)' },
+  { tag: [t.string, t.special(t.string)], color: 'var(--code-string)' },
+  { tag: [t.typeName, t.className], color: 'var(--code-type)' },
+  { tag: [t.bool, t.null], color: 'var(--code-number)' },
+  { tag: [t.macroName, t.processingInstruction, t.meta], color: 'var(--code-time)' },
+  { tag: [t.function(t.variableName), t.standard(t.variableName)], color: 'var(--code-in)' },
 ])
+
+/** Names a sketch author reaches for most, offered as completions in C++ mode. */
+const ARDUINO_WORDS: [label: string, detail: string][] = [
+  ['setup', 'dipanggil sekali'],
+  ['loop', 'diulang terus'],
+  ['pinMode', '(pin, mode)'],
+  ['digitalWrite', '(pin, HIGH/LOW)'],
+  ['digitalRead', '(pin)'],
+  ['analogRead', '(pin) 0..1023'],
+  ['analogWrite', '(pin, 0..255)'],
+  ['delay', '(ms)'],
+  ['delayMicroseconds', '(us)'],
+  ['millis', 'ms sejak mulai'],
+  ['micros', 'us sejak mulai'],
+  ['Serial.begin', '(baud)'],
+  ['Serial.print', '(nilai)'],
+  ['Serial.println', '(nilai)'],
+  ['map', '(x, a, b, c, d)'],
+  ['constrain', '(x, a, b)'],
+  ['min', '(a, b)'],
+  ['max', '(a, b)'],
+  ['abs', '(x)'],
+  ['random', '(max)'],
+  ['HIGH', ''],
+  ['LOW', ''],
+  ['INPUT', ''],
+  ['OUTPUT', ''],
+  ['INPUT_PULLUP', ''],
+  ['LED_BUILTIN', '13'],
+  ...[0, 1, 2, 3, 4, 5].map((n): [string, string] => [`A${n}`, 'pin analog']),
+  ['int', ''],
+  ['long', ''],
+  ['float', ''],
+  ['bool', ''],
+  ['byte', ''],
+  ['const', ''],
+  ['void', ''],
+  ['if', ''],
+  ['else', ''],
+  ['for', ''],
+  ['while', ''],
+  ['return', ''],
+]
+
+function cppCompletions() {
+  const options: Completion[] = ARDUINO_WORDS.map(([label, detail]) => ({ label, detail }))
+  return (context: CompletionContext) => {
+    const word = context.matchBefore(/[A-Za-z_][\w.]*/)
+    if (!word || (word.from === word.to && !context.explicit)) return null
+    return { from: word.from, options, validFor: /^[\w.]*$/ }
+  }
+}
 
 const theme = EditorView.theme({
   '&': { color: 'var(--text)', backgroundColor: 'var(--code-bg)', fontSize: '13.5px', borderRadius: '10px', border: '1px solid var(--border)', height: '100%' },
@@ -103,16 +161,26 @@ function completions(pins: PinSpec) {
   }
 }
 
+export interface Problem {
+  line: number
+  message: string
+  severity: 'error' | 'warning'
+}
+
 interface Props {
   value: string
   onChange: (value: string) => void
+  /** board: the mini language checked here in the page. cpp: Arduino C++, checked by the server. */
+  language: 'board' | 'cpp'
   pins: PinSpec
   maxLength: number
   label: string
+  /** Problems from outside the editor (the compile service), drawn on their lines. */
+  problems?: Problem[]
 }
 
 /** A real code editor for board programs: line numbers, colours, autocomplete and inline errors. */
-export default function CodeEditor({ value, onChange, pins, maxLength, label }: Props) {
+export default function CodeEditor({ value, onChange, language: lang, pins, maxLength, label, problems }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   // The editor is created once per board; keep the latest callback without recreating it.
@@ -134,23 +202,27 @@ export default function CodeEditor({ value, onChange, pins, maxLength, label }: 
           history(),
           bracketMatching(),
           closeBrackets(),
-          autocompletion({ override: [completions(pins)], icons: false }),
-          language(pins),
+          autocompletion({ override: [lang === 'cpp' ? cppCompletions() : completions(pins)], icons: false }),
+          lang === 'cpp' ? cpp() : language(pins),
           syntaxHighlighting(highlight),
-          linter(
-            (v): Diagnostic[] =>
-              compile(v.state.doc.toString(), pins).errors.map((e) => {
-                const line = v.state.doc.line(Math.min(e.line, v.state.doc.lines))
-                const lead = line.text.length - line.text.trimStart().length
-                return { from: line.from + lead, to: Math.max(line.to, line.from + lead + 1), severity: 'error', message: e.message }
-              }),
-            { delay: 200 },
-          ),
+          ...(lang === 'board'
+            ? [
+                linter(
+                  (v): Diagnostic[] =>
+                    compile(v.state.doc.toString(), pins).errors.map((e) => {
+                      const line = v.state.doc.line(Math.min(e.line, v.state.doc.lines))
+                      const lead = line.text.length - line.text.trimStart().length
+                      return { from: line.from + lead, to: Math.max(line.to, line.from + lead + 1), severity: 'error', message: e.message }
+                    }),
+                  { delay: 200 },
+                ),
+              ]
+            : []),
           lintGutter(),
           keymap.of([...closeBracketsKeymap, ...completionKeymap, ...lintKeymap, ...historyKeymap, ...defaultKeymap, indentWithTab]),
           // Refuse edits that would push the program past the size the simulator accepts.
           EditorState.transactionFilter.of((tr) => (tr.newDoc.length > maxLength ? [] : tr)),
-          placeholder('# Tulis program di sini, misalnya:\n# D13 = A0 > 30'),
+          placeholder(lang === 'cpp' ? '// Tulis sketch Arduino di sini' : '# Tulis program di sini, misalnya:\n# D13 = A0 > 30'),
           EditorView.contentAttributes.of({ 'aria-label': label, spellcheck: 'false', autocorrect: 'off', autocapitalize: 'off' }),
           EditorView.updateListener.of((u) => {
             if (!u.docChanged || u.transactions.some((tr) => tr.annotation(External))) return
@@ -175,6 +247,20 @@ export default function CodeEditor({ value, onChange, pins, maxLength, label }: 
     if (!editor || editor.state.doc.toString() === value) return
     editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: value }, annotations: [External.of(true)] })
   }, [value])
+
+  // Problems from the server follow the code they were found in; once the text moves on they are no longer valid.
+  useEffect(() => {
+    const editor = view.current
+    if (!editor) return
+    const doc = editor.state.doc
+    const marks: Diagnostic[] = (problems ?? []).map((p) => {
+      const line = doc.line(Math.min(Math.max(1, p.line), doc.lines))
+      const lead = line.text.length - line.text.trimStart().length
+      return { from: line.from + lead, to: Math.max(line.to, line.from + lead + 1), severity: p.severity, message: p.message }
+    })
+    editor.dispatch(setDiagnostics(editor.state, marks))
+    if (marks[0]) editor.dispatch({ effects: EditorView.scrollIntoView(marks[0].from, { y: 'center' }) })
+  }, [problems])
 
   return <div ref={host} className="code-host" />
 }

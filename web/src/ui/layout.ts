@@ -4,6 +4,7 @@ const KEY = 'iot-designer:ui:v2'
 
 export type Tool = 'select' | 'pan'
 export type Side = 'left' | 'right'
+export type RightTab = 'props' | 'code'
 
 export const WIDTH = {
   left: { min: 200, max: 420, default: 252 },
@@ -27,6 +28,12 @@ interface LayoutState {
   rightWidth: number
   /** select: drag on empty canvas draws a selection box. pan: drag moves the canvas. */
   tool: Tool
+  /** Which tab the right sidebar shows, and which board the Code tab edits when none is selected. */
+  rightTab: RightTab
+  codeTarget: string | null
+  setRightTab: (tab: RightTab) => void
+  /** Opens the Code tab, optionally on a given board. */
+  showCode: (nodeId?: string) => void
   toggleLeft: () => void
   toggleRight: () => void
   setWidth: (side: Side, width: number) => void
@@ -55,6 +62,10 @@ function stored(): Persisted {
 export const useLayout = create<LayoutState>((set) => ({
   ...stored(),
   tool: 'select',
+  rightTab: 'props',
+  codeTarget: null,
+  setRightTab: (rightTab) => set({ rightTab }),
+  showCode: (nodeId) => set((s) => ({ rightOpen: true, rightTab: 'code', codeTarget: nodeId ?? s.codeTarget })),
   toggleLeft: () => set((s) => ({ leftOpen: !s.leftOpen })),
   toggleRight: () => set((s) => ({ rightOpen: !s.rightOpen })),
   setWidth: (side, width) =>

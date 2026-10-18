@@ -103,7 +103,7 @@ export function stepEngine(graph: Graph, state: EngineState, dt: number): void {
     }
 
     const nodeState = (state.nodeState[id] ??= {})
-    const out = def.step({ props: node.props, inputs, state: nodeState, time: state.time, dt })
+    const out = def.step({ id, props: node.props, inputs, state: nodeState, time: state.time, dt })
     outputs.set(id, out)
 
     let history: number[] | undefined

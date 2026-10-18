@@ -19,7 +19,7 @@ export default function Toolbar() {
   const load = useEditor((s) => s.load)
   const clear = useEditor((s) => s.clear)
   const { status, speed, time, start, pause, reset, setSpeed } = useSim()
-  const { leftOpen, rightOpen, toggleLeft, toggleRight } = useLayout()
+  const { leftOpen, rightOpen, rightTab, toggleLeft, toggleRight, showCode } = useLayout()
   const theme = useTheme((s) => s.theme)
   const toggleTheme = useTheme((s) => s.toggle)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -41,7 +41,8 @@ export default function Toolbar() {
     }
   }
 
-  const label = status === 'running' ? 'Berjalan' : status === 'paused' ? 'Dijeda' : 'Berhenti'
+  const label = { running: 'Berjalan', paused: 'Dijeda', compiling: 'Mengompilasi', stopped: 'Berhenti' }[status]
+  const compiling = status === 'compiling'
 
   return (
     <header className="toolbar">
@@ -72,7 +73,7 @@ export default function Toolbar() {
             <Icon name="pause" /> Pause
           </button>
         ) : (
-          <button type="button" className="btn btn-primary" onClick={start}>
+          <button type="button" className="btn btn-primary" onClick={() => void start()} disabled={compiling}>
             <Icon name="play" /> {status === 'paused' ? 'Lanjut' : 'Run'}
           </button>
         )}
@@ -88,6 +89,15 @@ export default function Toolbar() {
             ))}
           </select>
         </label>
+        <button
+          type="button"
+          className={`btn ${rightOpen && rightTab === 'code' ? 'is-on' : ''}`}
+          onClick={() => showCode()}
+          aria-pressed={rightOpen && rightTab === 'code'}
+          title="Buka editor kode"
+        >
+          <Icon name="code" /> Kode
+        </button>
         <span className={`status status-${status}`} role="status">
           <i aria-hidden="true" /> {label} · {(time / 1000).toFixed(1)} s
         </span>

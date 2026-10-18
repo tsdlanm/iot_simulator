@@ -1,3 +1,4 @@
+import { UNO_SKETCH } from '../components/registry'
 import { PROJECT_VERSION, type Project } from './serialize'
 
 type N = Project['nodes'][number]
@@ -45,7 +46,7 @@ const uno = (): Project => ({
   version: PROJECT_VERSION,
   name: 'Kipas otomatis (Arduino Uno)',
   nodes: [
-    { id: 'uno', kind: 'mcu-uno', x: 330, y: 150, props: { program: UNO_PROGRAM } },
+    { id: 'uno', kind: 'mcu-uno', x: 330, y: 150, props: { mode: 'cpp', sketch: UNO_SKETCH, program: UNO_PROGRAM, adcMin: 0, adcMax: 500 } },
     { id: 'temp', kind: 'temp-sensor', x: 40, y: 520, props: { pattern: 'sine', min: 20, max: 40, period: 30 } },
     { id: 'fan', kind: 'fan', x: 540, y: 0, props: {} },
     { id: 'led', kind: 'led', x: 780, y: 0, props: { color: 'green' } },

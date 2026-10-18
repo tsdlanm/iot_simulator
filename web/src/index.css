@@ -29,6 +29,8 @@
   --code-out: #0f766e;
   --code-time: #c026d3;
   --code-operator: #6a7384;
+  --code-string: #0a7c42;
+  --code-type: #0b6bcb;
   color-scheme: light;
 }
 
@@ -62,6 +64,8 @@
   --code-out: #5eead4;
   --code-time: #f0abfc;
   --code-operator: #93a0b5;
+  --code-string: #86e0a3;
+  --code-type: #7fc4ff;
   color-scheme: dark;
 }
 
@@ -87,15 +91,33 @@ kbd { padding: 0 5px; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
 .side-right { grid-area: right; }
 .side { position: relative; }
 .palette-inner, .props-inner { height: 100%; overflow-y: auto; padding: 12px 10px 20px; }
+.props-inner { height: auto; min-height: 100%; }
 .palette-inner { width: var(--left-w); border-right: 1px solid var(--border); }
-.props-inner { width: var(--right-w); margin-left: auto; border-left: 1px solid var(--border); }
+.right-inner { display: flex; flex-direction: column; width: var(--right-w); height: 100%; margin-left: auto; border-left: 1px solid var(--border); }
+.tab-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.tabs { display: flex; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--border); }
+.tabs button { padding: 7px 12px; color: var(--muted); background: transparent; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button:hover { color: var(--text); }
+.tabs button[aria-selected='true'] { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+.props-empty { margin: 4px 2px; }
 
-/* A board is selected: the program editor takes the whole remaining height of the panel. */
-.props-inner.is-board { display: flex; flex-direction: column; padding-bottom: 12px; }
-.props-inner.is-board > * { flex: none; }
-.props-inner.is-board > .program { flex: 1 1 320px; display: flex; flex-direction: column; min-height: 300px; margin-top: 12px; }
-.program .code-host { flex: 1 1 auto; display: flex; min-height: 0; }
-.program .cm-editor { flex: 1; min-width: 0; }
+/* Code tab: the editor takes the height that is left; problems, status and serial sit below it. */
+.code-panel { display: flex; flex-direction: column; gap: 8px; height: 100%; padding: 10px 10px 12px; }
+.code-panel > * { flex: none; }
+.code-panel > .code-host, .code-panel > .code-fallback { flex: 1 1 200px; display: flex; min-height: 160px; }
+.code-panel .cm-editor { flex: 1; min-width: 0; }
+.code-empty { justify-content: center; }
+.code-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.code-head select { max-width: 60%; }
+.seg-ctl { display: inline-flex; padding: 2px; background: var(--panel-2); border-radius: 8px; }
+.seg-ctl button { padding: 3px 10px; color: var(--muted); background: transparent; border: 0; border-radius: 6px; font-size: 12px; }
+.seg-ctl button[aria-pressed='true'] { color: var(--text); background: var(--panel); box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); font-weight: 600; }
+.code-status { margin: 0; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.btn-code { margin-top: 0; margin-bottom: 8px; }
+.btn-sm { width: 22px; height: 22px; }
+.serial { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--code-bg); }
+.serial header { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 2px 10px; color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--border); }
+.serial pre { height: 96px; margin: 0; padding: 6px 10px; overflow: auto; font: 12px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-all; }
 
 /* Drag handle on a sidebar's inner edge */
 .resizer { position: absolute; top: 0; bottom: 0; z-index: 20; width: 9px; cursor: col-resize; touch-action: none; }
@@ -117,7 +139,7 @@ kbd { padding: 0 5px; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
 .status i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
 .status-running { color: var(--live); }
 .status-running i { background: var(--live); animation: pulse 1.2s ease-in-out infinite; }
-.status-paused i { background: var(--bool); }
+.status-paused i, .status-compiling i { background: var(--bool); }
 @keyframes pulse { 50% { opacity: 0.3; } }
 
 .btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; background: transparent; border: 1px solid transparent; border-radius: 8px; transition: background 0.12s; }
@@ -186,28 +208,17 @@ select:hover, input[type='number']:hover { border-color: var(--border); }
 .field { display: grid; gap: 4px; margin: 10px 0; color: var(--muted); font-size: 12px; }
 .field-check { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; }
 
-.chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
-.chips code, .help code { padding: 0 5px; font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--panel-2); border-radius: 4px; }
 .legend { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--num); }
 .legend.port-boolean { background: var(--bool); }
 .legend.pin-out { border-radius: 2px; }
 
 /* ---------- Code editor ---------- */
-.program { margin-top: 14px; }
-.program-head { display: flex; justify-content: space-between; margin-bottom: 6px; color: var(--muted); font-size: 12px; }
 .code-fallback { flex: 1; margin: 0; padding: 10px; min-height: 240px; font: 12.5px/1.65 ui-monospace, Menlo, monospace; color: var(--muted); background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; overflow: auto; }
 .errors { display: grid; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; color: var(--danger); font-size: 12px; }
 .errors li { display: flex; gap: 6px; align-items: flex-start; }
 .errors svg { flex: none; margin-top: 2px; }
 .errors .more { color: var(--muted); padding-left: 19px; }
-.ok { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; color: var(--live); font-size: 12px; }
-.help { margin-top: 10px; color: var(--muted); font-size: 12px; }
-.help summary { cursor: pointer; }
-.help ul { padding-left: 18px; }
 
-.shortcuts { display: grid; grid-template-columns: auto 1fr; gap: 7px 12px; margin: 14px 0 0; color: var(--muted); font-size: 12px; }
-.shortcuts dt { color: var(--text); }
-.shortcuts dd { margin: 0; text-align: right; }
 
 /* ---------- Canvas ---------- */
 .canvas { grid-area: canvas; position: relative; min-width: 0; }
@@ -352,8 +363,8 @@ select:hover, input[type='number']:hover { border-color: var(--border); }
 @media (max-width: 900px) {
   .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(420px, 1fr) auto; grid-template-areas: 'bar' 'left' 'canvas' 'right'; height: auto; min-height: 100%; }
   .side-left { max-height: calc(var(--left) * 0.9); }
-  .palette-inner, .props-inner { width: auto; border: 0; }
+  .palette-inner, .right-inner { width: auto; border: 0; }
+  .right-inner { height: 70vh; }
   .resizer { display: none; }
-  .props-inner.is-board > .program { min-height: 340px; }
   .toolbar .group-end { margin-left: 0; }
 }

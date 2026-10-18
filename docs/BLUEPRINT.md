@@ -9,7 +9,7 @@ Aplikasi web untuk **merancang sistem IoT secara visual lalu menyimulasikannya d
 | M0 | Kerangka repo | Selesai (CI menjalankan test dan build) |
 | M1 | Editor | Selesai |
 | M2 | Simulasi | Selesai. Berjalan di thread utama, belum di Web Worker; cukup untuk rangkaian kecil, dan engine-nya sudah terpisah dari UI sehingga mudah dipindah |
-| M1+ | Papan mikrokontroler | Selesai: Arduino Uno, ESP32, Raspberry Pi Pico dengan gambar dan pin asli, diprogram lewat bahasa mini. Belum ada emulasi kode Arduino/MicroPython asli, validasi daya (VCC/GND), dan komponen sensor/aktuator berwujud asli |
+| M1+ | Papan mikrokontroler | Selesai: Arduino Uno, ESP32, Raspberry Pi Pico dengan gambar dan pin asli, diprogram lewat bahasa mini. Arduino Uno kini menjalankan C++ asli: kompilasi di server (avr-gcc), emulasi ATmega328P di browser (`avr8js`). Belum ada: emulasi ESP32/Pico, library Arduino di luar inti, komponen berpresisi waktu (servo, DHT22, I2C), validasi daya (VCC/GND) |
 | M3 | Backend proyek | Belum. Sementara proyek disimpan di browser dan bisa diekspor/impor |
 | M4 | Akun | Belum (ditunda) |
 | M5 | Rilis v0.1 | Belum |
@@ -43,7 +43,7 @@ Contoh rangkaian yang harus bisa dibuat: **Sensor suhu → Pembanding (> 30) →
 
 ### Tidak masuk MVP (nanti)
 
-- Emulasi mikrokontroler sungguhan (kode Arduino via `avr8js`/`rp2040js`)
+- Emulasi ESP32/Pico dan library Arduino tambahan (Uno sudah dengan `avr8js`; Pico lewat `rp2040js` rencananya)
 - Koneksi ke perangkat asli lewat MQTT
 - Kolaborasi real-time dan berbagi proyek lewat link publik
 - Komponen custom buatan pengguna

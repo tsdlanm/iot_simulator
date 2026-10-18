@@ -5,7 +5,7 @@ import { isWireColor, MAX_POINTS, type Pt } from './wire'
 
 export const PROJECT_VERSION = 1
 
-/** Longest string property accepted from a file; guards against huge or hostile projects. */
+/** Longest string property accepted from a file unless the property says otherwise; guards against huge or hostile projects. */
 const MAX_PROP_LENGTH = 5000
 
 export interface Project {
@@ -78,7 +78,7 @@ export function parseProject(raw: unknown): Project | null {
       const ok =
         typeof v === typeof p.default &&
         (typeof v !== 'number' || Number.isFinite(v)) &&
-        (typeof v !== 'string' || v.length <= MAX_PROP_LENGTH)
+        (typeof v !== 'string' || v.length <= (p.type === 'code' ? (p.maxLength ?? MAX_PROP_LENGTH) : MAX_PROP_LENGTH))
       props[p.key] = ok ? (v as Props[string]) : p.default
     }
     nodes.push({ id: n.id, kind: n.kind, x: n.x, y: n.y, props })

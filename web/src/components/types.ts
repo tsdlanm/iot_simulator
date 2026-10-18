@@ -10,13 +10,22 @@ export interface PortDef {
   type: PortType
 }
 
+interface PropBase {
+  key: string
+  label: string
+  /** Not listed in the generic property fields; edited somewhere else, such as the Code tab. */
+  hidden?: boolean
+}
+
 export type PropDef =
-  | { key: string; label: string; type: 'number'; default: number; min?: number; max?: number; step?: number }
-  | { key: string; label: string; type: 'select'; default: string; options: { value: string; label: string }[] }
-  | { key: string; label: string; type: 'boolean'; default: boolean }
-  | { key: string; label: string; type: 'code'; default: string; rows?: number }
+  | (PropBase & { type: 'number'; default: number; min?: number; max?: number; step?: number })
+  | (PropBase & { type: 'select'; default: string; options: { value: string; label: string }[] })
+  | (PropBase & { type: 'boolean'; default: boolean })
+  | (PropBase & { type: 'code'; default: string; rows?: number; maxLength?: number })
 
 export interface StepContext {
+  /** Id of the node being stepped. */
+  id: string
   props: Props
   inputs: Record<string, Value | undefined>
   /** Mutable per-node state that survives between ticks. */

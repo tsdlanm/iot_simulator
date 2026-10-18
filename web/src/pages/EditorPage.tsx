@@ -4,7 +4,7 @@ import { useEffect, type CSSProperties } from 'react'
 import { startAutosave } from '../editor/autosave'
 import Canvas from '../editor/Canvas'
 import Palette from '../editor/Palette'
-import PropertiesPanel from '../editor/PropertiesPanel'
+import RightPanel from '../editor/RightPanel'
 import { useEditor } from '../editor/store'
 import Toolbar from '../editor/Toolbar'
 import { useLayout } from '../ui/layout'
@@ -70,7 +70,7 @@ export default function EditorPage() {
         <Canvas />
         <aside className="side side-right" aria-label="Properti" inert={!rightOpen}>
           <Resizer side="right" />
-          <PropertiesPanel />
+          <RightPanel />
         </aside>
         <Toasts />
       </div>

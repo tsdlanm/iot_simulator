@@ -1,3 +1,4 @@
+import { CPP_KIND, exchange } from '../emu/bridge'
 import { compileCached, execute, MAX_PROGRAM_LENGTH, type PinSpec } from '../sim/firmware'
 import { ESP32, PICO, UNO } from './boards'
 import type { BoardLayout, Category, ComponentDef, Props, PropDef, StepContext, Value } from './types'
@@ -108,7 +109,53 @@ export function pinSpec(board: BoardLayout): PinSpec {
   }
 }
 
-function boardDef(kind: string, label: string, description: string, board: BoardLayout, program: string): ComponentDef {
+/** Longest Arduino sketch the compile service accepts. */
+export const SKETCH_LIMIT = 64 * 1024
+
+export const UNO_SKETCH = `// A0 = sensor suhu (0 V = 0 °C, 5 V = 500 °C)
+const int KIPAS = 13;
+const int LAMPU = 12;
+
+bool lampuNyala = false;
+
+void setup() {
+  pinMode(KIPAS, OUTPUT);
+  pinMode(LAMPU, OUTPUT);
+  Serial.begin(9600);
+}
+
+void loop() {
+  float suhu = analogRead(A0) * 500.0 / 1023.0;
+
+  digitalWrite(KIPAS, suhu > 30 ? HIGH : LOW);
+
+  lampuNyala = !lampuNyala;
+  digitalWrite(LAMPU, lampuNyala);
+
+  Serial.println(suhu);
+  delay(500);
+}
+`
+
+/** Extra properties of the Arduino Uno, which can run real C++ as well as the mini language. */
+const UNO_PROPS: PropDef[] = [
+  {
+    key: 'mode',
+    label: 'Bahasa',
+    type: 'select',
+    default: 'cpp',
+    hidden: true,
+    options: [
+      { value: 'cpp', label: 'Arduino C++' },
+      { value: 'simple', label: 'Sederhana' },
+    ],
+  },
+  { key: 'sketch', label: 'Sketch', type: 'code', default: UNO_SKETCH, hidden: true, rows: 14, maxLength: SKETCH_LIMIT },
+  { key: 'adcMin', label: 'Nilai sensor di 0 V', type: 'number', default: 0, step: 1 },
+  { key: 'adcMax', label: 'Nilai sensor di 5 V', type: 'number', default: 500, step: 1 },
+]
+
+function boardDef(kind: string, label: string, description: string, board: BoardLayout, program: string, extra: PropDef[] = []): ComponentDef {
   const pins = pinSpec(board)
   return {
     kind,
@@ -121,8 +168,9 @@ function boardDef(kind: string, label: string, description: string, board: Board
       .filter((p) => p.role === 'in-num' || p.role === 'in-bool')
       .map((p) => ({ id: p.id, label: p.label, type: p.role === 'in-num' ? ('number' as const) : ('boolean' as const) })),
     outputs: board.pins.filter((p) => p.role === 'out').map((p) => ({ id: p.id, label: p.label, type: 'boolean' as const })),
-    props: [{ key: 'program', label: 'Program', type: 'code', default: program, rows: 10 }],
+    props: [{ key: 'program', label: 'Program', type: 'code', default: program, hidden: true, rows: 10, maxLength: MAX_PROGRAM_LENGTH }, ...extra],
     step: (ctx) => {
+      if (kind === CPP_KIND && ctx.props.mode !== 'simple') return exchange(ctx.id, ctx.inputs, ctx.props)
       const source = typeof ctx.props.program === 'string' ? ctx.props.program : ''
       return execute(compileCached(kind, source, pins), pins, ctx.inputs, ctx.time / 1000)
     },
@@ -135,7 +183,7 @@ const bool = (id: string, label: string) => ({ id, label, type: 'boolean' as con
 
 export const COMPONENTS: ComponentDef[] = [
   // Microcontroller boards
-  boardDef('mcu-uno', 'Arduino Uno', 'Papan Arduino Uno R3 (ATmega328P). Pin analog A0 sampai A5, digital D2 sampai D13.', UNO, UNO_PROGRAM),
+  boardDef('mcu-uno', 'Arduino Uno', 'Papan Arduino Uno R3 (ATmega328P). Pin analog A0 sampai A5, digital D2 sampai D13.', UNO, UNO_PROGRAM, UNO_PROPS),
   boardDef('mcu-esp32', 'ESP32 DevKit', 'ESP32 DevKit V1 30 pin. Enam masukan analog dan 13 pin keluaran.', ESP32, ESP32_PROGRAM),
   boardDef('mcu-pico', 'Raspberry Pi Pico', 'Raspberry Pi Pico (RP2040) dengan 40 pin. Tiga masukan analog GP26 sampai GP28.', PICO, PICO_PROGRAM),
 
