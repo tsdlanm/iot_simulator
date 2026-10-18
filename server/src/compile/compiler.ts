@@ -47,7 +47,9 @@ const RAM_MAX = 2048
 const MAX_CACHED = 200
 const MAX_HEX_BYTES = 256 * 1024
 
-const COMMON = ['-c', '-Os', '-w', '-ffunction-sections', '-fdata-sections', `-mmcu=${MCU}`, '-DF_CPU=16000000L', '-DARDUINO=10806', '-DARDUINO_AVR_UNO', '-DARDUINO_ARCH_AVR']
+const COMMON = ['-c', '-Os', '-w', '-ffunction-sections', '-fdata-sections', `-mmcu=${MCU}`, '-DF_CPU=16000000L', '-DARDUINO=10806', '-DARDUINO_AVR_UNO', '-DARDUINO_ARCH_AVR',
+  // Older avr-gcc (Debian ships 5.4) lacks this in <float.h>, and the Arduino core's WString uses it. Newer ones define it identically.
+  '-DDECIMAL_DIG=__DECIMAL_DIG__']
 const C_FLAGS = ['-std=gnu11']
 const CXX_FLAGS = ['-std=gnu++11', '-fpermissive', '-fno-exceptions', '-fno-threadsafe-statics', '-Wno-error=narrowing']
 
