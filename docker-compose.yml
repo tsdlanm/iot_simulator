@@ -10,5 +10,30 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  # API with the Arduino compile service. Start with:  docker compose --profile api up --build
+  api:
+    profiles: ["api"]
+    build: ./server
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgres://iot:iot@db:5432/iot_designer
+      COMPILE_RATE_LIMIT: "30"
+    ports:
+      - "8080:8080"
+    # Compiles run untrusted code through gcc, so the container is locked down.
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - compile-cache:/var/cache/compile
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2
+
 volumes:
   pgdata:
+  compile-cache:

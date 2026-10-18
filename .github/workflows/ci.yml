@@ -40,3 +40,17 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the API image
+        run: docker build -t iot-designer-api server
+      - name: Compile a sketch inside the hardened container
+        run: |
+          docker run -d --name api --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges -p 8080:8080 iot-designer-api
+          for i in $(seq 1 30); do curl -sf localhost:8080/api/health && break; sleep 1; done
+          curl -sf localhost:8080/api/compile/status | grep '"available":true'
+          curl -sf -X POST localhost:8080/api/compile -H 'content-type: application/json' \
+            -d '{"code":"void setup(){pinMode(13,OUTPUT);}\nvoid loop(){digitalWrite(13,HIGH);}"}' | grep '"ok":true'

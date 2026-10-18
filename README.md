@@ -98,9 +98,9 @@ Server berjalan tanpa `DATABASE_URL`; hanya `/api/ready` yang menjawab 503.
 
 ### Layanan kompilasi
 
-Butuh toolchain AVR di server: `sudo apt install gcc-avr avr-libc binutils-avr arduino-core-avr` (atau pakai `server/Dockerfile`, belum diuji build-nya). Jalankan server dan `npm run dev` di `web/` (Vite meneruskan `/api` ke port 8080). Pengaturan: `COMPILE_AVR_DIR`, `COMPILE_CACHE_DIR`, `COMPILE_TIMEOUT_MS`, `COMPILE_CONCURRENCY`, `COMPILE_RATE_LIMIT`, `TRUST_PROXY` (lihat `.env.example`).
+Butuh toolchain AVR di server: `sudo apt install gcc-avr avr-libc binutils-avr arduino-core-avr` (atau pakai Docker: `docker compose --profile api up --build` menjalankan API bersama PostgreSQL; CI membangun image dan mengompilasi satu sketch di dalamnya. Build lokal saya terhenti oleh batas pull Docker Hub, jadi hasil CI yang pertama menjadi bukti pertamanya). Jalankan server dan `npm run dev` di `web/` (Vite meneruskan `/api` ke port 8080). Pengaturan: `COMPILE_AVR_DIR`, `COMPILE_CACHE_DIR`, `COMPILE_TIMEOUT_MS`, `COMPILE_CONCURRENCY`, `COMPILE_RATE_LIMIT`, `TRUST_PROXY` (lihat `.env.example`).
 
-Keamanan: kode pengguna dicek dulu (ukuran, header yang diizinkan, tanpa `asm`), dijalankan tanpa shell dengan batas waktu, memori, dan antrean, plus pembatasan per klien. Pemeriksaan itu hanya lapisan tambahan; **di produksi jalankan layanan ini dalam container terisolasi** (tanpa rahasia dan jaringan keluar, filesystem read-only kecuali direktori cache).
+Keamanan: kode pengguna dicek dulu (ukuran, header yang diizinkan, tanpa `asm`), dijalankan tanpa shell dengan batas waktu, memori, dan antrean, plus pembatasan per klien. Pemeriksaan itu hanya lapisan tambahan; **di produksi jalankan layanan ini dalam container terisolasi.** Service `api` di `docker-compose.yml` sudah read-only, tanpa capability, dengan batas proses, memori, dan CPU; untuk produksi tambahkan juga pemblokiran jaringan keluar dan jangan beri rahasia selain yang dibutuhkan.
 
 ## Struktur
 
